@@ -11,7 +11,7 @@ VoteCore is a full-stack, multi-tenant digital voting platform designed to execu
   * **Super Admin:** Global oversight, organization approval, and fraud monitoring.
   * **Organizer:** Election creation, phase management, and candidate scrutiny.
   * **Voter:** Secure ballot casting and real-time result tracking.
-* **State-Machine Lifecycle:** Elections are cryptographically locked into strict phases (`UPCOMING` -> `NOMINATION` -> `ACTIVE` -> `COMPLETED`). Actions like candidate registration or ballot casting are rejected at the database level if attempted out-of-phase.
+* **State-Machine Lifecycle:** Elections are cryptographically locked into strict phases (`UPCOMING` $\rightarrow$ `NOMINATION` $\rightarrow$ `ACTIVE` $\rightarrow$ `COMPLETED`). Actions like candidate registration or ballot casting are rejected at the database level if attempted out-of-phase.
 * **Immutable Audit & Fraud Logging:** Automated Oracle PL/SQL triggers actively monitor transactions. Any unauthorized access attempts, phase-bypass attempts, or double-voting anomalies are permanently written to a tamper-proof `FRAUD_LOGS` ledger.
 * **"Civic Ledger" UI:** A custom, mobile-first design system utilizing deep ink tones, guilloché seal watermarks, and micro-animations to replicate the gravity and security of physical government documents.
 
@@ -19,12 +19,15 @@ VoteCore is a full-stack, multi-tenant digital voting platform designed to execu
 
 | Layer | Technology |
 | :--- | :--- |
-| **Frontend** | HTML5, CSS3, JavaScript (Vanilla ES6) |
-| **Backend** | Python 3, Flask, REST API |
-| **Database** | Oracle Database (16-table normalized schema) |
-| **DB Interface** | Oracle SQL*Plus, `oracledb` Python driver |
-| **Security** | `bcrypt` (Hashing), Flask Sessions, OTP Verification |
-| **Version Control** | Git, GitHub |
+| **Frontend** | HTML + CSS + JavaScript |
+| **Backend** | Python + Flask |
+| **Database** | Oracle Database |
+| **Database interface** | Oracle SQL*Plus |
+| **Python $\rightarrow$ Oracle** | `oracledb` Python driver |
+| **Authentication** | Flask Sessions + bcrypt |
+| **API** | Flask REST API |
+| **Testing** | Postman |
+| **Version Control** | Git/GitHub |
 
 ## 🔒 Security Implementation
 
