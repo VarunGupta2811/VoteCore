@@ -1,0 +1,10 @@
+# Security Credentials
+.env
+
+# Python Caches
+__pycache__/
+*.pyc
+
+# Virtual Environments (if you used one)
+venv/
+env/

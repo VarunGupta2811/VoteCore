@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Profile - VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onload="loadProfile()">
+    <div class="container">
+        <h1>My Profile</h1>
+        <div class="card">
+            <h2>Personal Information</h2>
+            <label style="font-weight: bold; font-size: 0.9em;">Mobile Number:</label>
+            <input type="text" id="profMobile" style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            
+            <label style="font-weight: bold; font-size: 0.9em;">Country:</label>
+            <input type="text" id="profCountry" style="width: 100%; box-sizing: border-box; margin-bottom: 10px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            
+            <label style="font-weight: bold; font-size: 0.9em;">State:</label>
+            <input type="text" id="profState" style="width: 100%; box-sizing: border-box; margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            
+            <button onclick="updateProfile()" style="background-color: #2ecc71; width: 100%;">Update Info</button>
+            <p id="profMessage" style="padding: 10px; border-radius: 5px; display: none; margin-top: 10px;"></p>
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+            
+            <h2>🛡️ Identity Wallet</h2>
+            <p style="margin: 5px 0;"><strong>Voter ID (EPIC):</strong> <span id="profVoterId"></span></p>
+            <p style="margin: 5px 0;"><strong>Aadhaar:</strong> <span id="profAadhaar"></span></p>
+            <p style="margin: 5px 0;"><strong>Status:</strong> <span id="profStatus"></span></p>
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+            <h2>My Organizations</h2>
+            <ul id="profOrgs" style="text-align: left; background-color: #f9f9f9; padding: 15px 30px; border-radius: 5px; border: 1px solid #ccc;">
+                <!-- Organizations load here -->
+            </ul>
+
+            <button onclick="window.location.href='dashboard.html'" style="background-color: #7f8c8d; width: 100%; margin-top: 20px;">
+                ⬅ Back to Dashboard
+            </button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

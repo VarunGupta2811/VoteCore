@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Election - VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onload="loadElection()">
+    <div class="container">
+        <h1>VoteCore Election</h1>
+        <div class="card">
+            <h2 id="welcome">Welcome!</h2>
+            <h3 id="electionTitle">Loading Election...</h3>
+            <p id="electionDescription"></p>
+            <p id="electionStatus" style="font-weight: bold;"></p>
+
+            <h3>Candidates</h3>
+            <div id="candidates">
+                <!-- Candidates will be loaded here dynamically -->
+            </div>
+
+            <!-- FIXED BACK BUTTON -->
+            <div style="margin-top: 20px;">
+                <button onclick="window.location.href='dashboard.html'" style="background-color: #7f8c8d; width: 100%;">
+                    ⬅ Back to Dashboard
+                </button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

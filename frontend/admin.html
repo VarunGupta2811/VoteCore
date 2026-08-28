@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Management Panel - VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onload="loadAdminUI()">
+    <div class="container">
+        <h1>VoteCore Management</h1>
+        
+        <!-- ========================================== -->
+        <!-- SUPER ADMIN SECTION (PID = 1 ONLY)         -->
+        <!-- ========================================== -->
+        <div id="superAdminSection" style="display: none;">
+            <div class="card" style="border-left: 5px solid #2c3e50; margin-bottom: 20px;">
+                <h2>👑 Global Super Admin</h2>
+                <p style="font-size: 0.9em; color: #555;">Platform-wide controls and security monitoring.</p>
+            </div>
+
+            <div class="card" style="border-left: 5px solid #2ecc71;">
+                <h2>Approve Pending Organizations</h2>
+                <div id="pendingOrgsContainer" style="background-color: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #ccc; margin-bottom: 10px;">
+                    <p style="color: #7f8c8d; margin: 0;">Loading pending requests...</p>
+                </div>
+                <button onclick="loadPendingOrgs()" style="background-color: #3498db; width: 100%;">Refresh Requests</button>
+            </div>
+
+            <div class="card" style="margin-top: 20px; border-left: 5px solid #e74c3c;">
+                <h2>Security & Audit Logs</h2>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button onclick="loadAuditLogs()" style="background-color: #3498db; flex: 1;">Audit Logs</button>
+                    <button onclick="loadFraudLogs()" style="background-color: #e74c3c; flex: 1;">Fraud Alerts</button>
+                </div>
+                <div id="logsContainer" style="max-height: 300px; overflow-y: auto; background-color: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #ccc; color: #333;">
+                    <p style="color: #7f8c8d; text-align: center; margin: 0;">Select a log type.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- ORGANIZER SECTION                          -->
+        <!-- ========================================== -->
+        <div id="organizerSection" style="display: none; margin-top: 20px;">
+            <div class="card" style="border-left: 5px solid #f39c12; margin-bottom: 20px;">
+                <h2>⚙️ Organizer Panel</h2>
+                <p style="font-size: 0.9em; color: #555;">Manage elections, candidate scrutiny, and organization members.</p>
+            </div>
+
+            <div class="card">
+                <h2>1. Create New Election (UPCOMING Phase)</h2>
+                <input type="text" id="electionOrgId" placeholder="Organization ID (e.g., CS_CLUB_26)" style="text-transform: uppercase;">
+                <input type="text" id="electionTitle" placeholder="Election Title">
+                <textarea id="electionDescription" placeholder="Description..." rows="3" style="width: 100%; margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;"></textarea>
+                <button onclick="createElection()">Create Election</button>
+                <p id="adminMessage" style="display: none; padding: 10px; margin-top: 15px; border-radius: 5px; color: white;"></p>
+            </div>
+
+            <div class="card" style="margin-top: 20px; border-left: 5px solid #3498db;">
+                <h2>2. Manage Election Phases</h2>
+                <input type="number" id="phaseElectionId" placeholder="Election ID (e.g., 1)">
+                <select id="phaseSelect" style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ccc;">
+                    <option value="UPCOMING">UPCOMING (Announced, no actions)</option>
+                    <option value="NOMINATION">NOMINATION (Taking candidates)</option>
+                    <option value="ACTIVE">ACTIVE (Voting Day)</option>
+                    <option value="COMPLETED">COMPLETED (Results published)</option>
+                </select>
+                <button onclick="changeElectionPhase()" style="background-color: #3498db;">Update Phase</button>
+            </div>
+
+            <div class="card" style="margin-top: 20px; border-left: 5px solid #9b59b6;">
+                <h2>3. Candidate Scrutiny</h2>
+                <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Approve pending candidates so they appear on the ballot.</p>
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <input type="number" id="scrutinyElectionId" placeholder="Election ID" style="flex: 2; margin: 0;">
+                    <button onclick="fetchPendingCandidates()" style="background-color: #9b59b6; flex: 1; margin: 0;">Fetch</button>
+                </div>
+                <div id="scrutinyContainer" style="background-color: #f9f9f9; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
+                    <p style="color: #7f8c8d; margin: 0;">Enter an Election ID to view pending candidates.</p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2>Add Member to Organization</h2>
+                <input type="text" id="memberOrgId" placeholder="Organization ID" style="text-transform: uppercase;">
+                <input type="number" id="memberPid" placeholder="User PID to Add">
+                <select id="memberRole" style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #ccc;">
+                    <option value="ORGANIZER">Organizer (Can manage elections)</option>
+                    <option value="VOTER">Voter (Standard participant)</option>
+                </select>
+                <button onclick="addOrgMember()" style="background-color: #27ae60;">Add Member</button>
+                <p id="memberMessage" style="display: none; padding: 10px; margin-top: 15px; border-radius: 5px; color: white;"></p>
+            </div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <button onclick="window.location.href='dashboard.html'" style="background-color: #7f8c8d; width: 100%;">⬅ Back to Voter Dashboard</button>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

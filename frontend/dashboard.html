@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onload="loadDashboard()">
+    <div class="container">
+        <h1>VoteCore Dashboard</h1>
+        
+        <div class="card">
+            <h2 id="welcome">Welcome!</h2>
+            
+            <!-- SUPER ADMIN BUTTON -->
+            <div id="superAdminBtnContainer" style="display: none; margin-bottom: 10px;">
+                <button onclick="window.location.href='admin.html'" style="background-color: #2c3e50; width: 100%; font-weight: bold; color: white;">
+                    👑 Global Super Admin Panel
+                </button>
+            </div>
+
+            <!-- ORGANIZER BUTTON -->
+            <div id="organizerBtnContainer" style="display: none; margin-bottom: 20px;">
+                <button onclick="window.location.href='admin.html'" style="background-color: #f39c12; width: 100%; font-weight: bold;">
+                    ⚙️ Organizer Management Panel
+                </button>
+            </div>
+            
+            <h3>Available Elections</h3>
+            <div id="elections">
+                <!-- Elections load here -->
+            </div>
+
+            <!-- REQUEST AN ORGANIZATION -->
+            <div id="requestOrgContainer" class="card" style="margin-top: 20px; border-left: 5px solid #9b59b6; background-color: #fcfcfc;">
+                <h3 style="margin-top: 0;">Request New Organization</h3>
+                <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">Submit a request to create a new organization.</p>
+                <input type="text" id="newOrgId" placeholder="Unique Org ID (e.g., CS_CLUB_26)" style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; text-transform: uppercase;">
+                <input type="text" id="newOrgName" placeholder="Organization Full Name" style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="email" id="newOrgEmail" placeholder="Organization Contact Email" style="width: 100%; box-sizing: border-box; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <button onclick="requestNewOrg()" style="background-color: #9b59b6; width: 100%;">Submit Request for Approval</button>
+                <p id="orgMessage" style="display: none; padding: 10px; margin-top: 10px; border-radius: 4px; color: white; text-align: center;"></p>
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; gap: 10px;">
+                <button onclick="window.location.href='profile.html'" style="background-color: #3498db; flex: 1;">👤 My Profile</button>
+                <button onclick="logout()" style="background-color: #e74c3c; flex: 1;">Logout</button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

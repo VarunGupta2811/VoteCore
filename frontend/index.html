@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoteCore - Login & Registration</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body onload="checkLoginStatus()">
+    <div class="container">
+        <h1>VoteCore Election System</h1>
+        
+        <!-- Login Form -->
+        <div id="loginForm" class="card">
+            <h2>Voter Login</h2>
+            <input type="email" id="email" placeholder="Email Address">
+            <input type="password" id="password" placeholder="Password">
+            <button onclick="login()">Login</button>
+            <p id="message" style="padding: 10px; margin-top: 15px;"></p>
+            <p class="toggle-link" onclick="toggleForms()" style="cursor:pointer; color: #3498db; text-decoration: underline; margin-top: 15px; display: inline-block;">Don't have an account? Register here</p>
+        </div>
+
+        <!-- OTP Verification Form -->
+        <div id="otpForm" class="card" style="display: none; max-width: 400px; margin: 0 auto; text-align: center;">
+            <h2>Verify Your Login</h2>
+            <p style="color: #555; font-size: 0.9em; margin-bottom: 15px;">A 6-digit OTP has been sent to your email.</p>
+            <input type="text" id="otpCode" placeholder="000000" maxlength="6" style="text-align: center; letter-spacing: 5px; font-size: 1.5em; font-weight: bold; padding: 10px; margin-bottom: 15px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px;">
+            <button onclick="verifyOTP()" style="background-color: #2ecc71; width: 100%;">Verify & Login</button>
+            <p id="otpMessage" style="padding: 10px; margin-top: 15px; border-radius: 5px; display: none;"></p>
+            <p class="toggle-link" onclick="window.location.reload()" style="cursor:pointer; color: #e74c3c; text-decoration: underline; margin-top: 15px; display: inline-block;">Cancel</p>
+        </div>
+
+        <!-- Registration Form (Expanded with Gov ID) -->
+        <div id="registerForm" class="card" style="display: none; max-width: 500px; margin: 0 auto;">
+            <h2>Voter Registration</h2>
+            <p style="font-size: 0.9em; color: #555; margin-bottom: 15px;">You must be 18+ and provide a valid Government ID to register.</p>
+            
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="regFirstName" placeholder="First Name *" style="flex: 1;">
+                <input type="text" id="regMiddleName" placeholder="Middle Name" style="flex: 1;">
+                <input type="text" id="regLastName" placeholder="Last Name *" style="flex: 1;">
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <input type="text" id="regMobile" placeholder="Mobile Number *" maxlength="10" style="flex: 1; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="email" id="regEmail" placeholder="Email Address *" style="flex: 1; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <input type="text" id="regCountry" placeholder="Country" value="India" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                <input type="text" id="regState" placeholder="State (e.g., Telangana)" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+            </div>
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+            <label style="font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px;">Date of Birth *:</label>
+            <input type="date" id="regDob" style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 15px;">
+            
+            <label style="font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px;">Government ID Number (12 digits) *:</label>
+            <input type="text" id="regAadhaar" placeholder="Enter 12-digit number" maxlength="12" style="width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 15px;">
+            
+            <label style="font-weight: bold; font-size: 0.9em; display: block; margin-bottom: 5px;">Voter ID / EPIC No *:</label>
+            <input type="text" id="regVoterId" placeholder="e.g., ABC1234567" maxlength="20" style="text-transform: uppercase; width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 15px;">
+
+            <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+            <input type="password" id="regPassword" placeholder="Create Password *" style="width: 100%; box-sizing: border-box; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 4px;">
+            <input type="password" id="regConfirmPassword" placeholder="Confirm Password *" style="width: 100%; box-sizing: border-box; padding: 10px; margin-top: 15px; border: 1px solid #ccc; border-radius: 4px;">
+            
+            <button onclick="registerUser()" style="margin-top: 20px; width: 100%; background-color: #27ae60;">Register Securely</button>
+            <p id="regMessage" style="padding: 10px; border-radius: 5px; display: none; margin-top: 15px;"></p>
+            
+            <div style="text-align: center;">
+                <p class="toggle-link" onclick="toggleForms()" style="cursor:pointer; color: #3498db; text-decoration: underline; margin-top: 15px; display: inline-block;">Already have an account? Login</p>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

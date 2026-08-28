@@ -1,0 +1,764 @@
+/* ============================================================================
+   VOTECORE — "CIVIC LEDGER" DESIGN SYSTEM
+   ----------------------------------------------------------------------------
+   Direction: VoteCore verifies identity (Government ID, OTP), casts and
+   counts ballots, and keeps an audit trail. The design should feel like a
+   secure, printed civic document brought online — an official ballot paper
+   laid on an ink-navy desk — rather than a generic glassy SaaS dashboard.
+
+   Signature devices (used deliberately, not decoratively):
+     1. A guilloché "seal" rosette watermarked behind every page's H1 —
+        the fine engraved-line pattern used on currency/certificates to
+        signal authenticity.
+     2. Thin gold "registration marks" in the corners of every .card —
+        the crop/alignment marks used in security printing. They quietly
+        say "this is a verifiable record" on every panel in the app.
+
+   Built mobile-first: unqualified rules are the mobile layout: min-width
+   media queries layer on tablet/desktop enhancements. No floats, no fixed
+   px layout widths — layout is done with Flexbox, Grid, %, rem and clamp().
+   ============================================================================ */
+
+/* ============================================================================
+   1. FONTS
+   Three families, one job each — nothing doubles up:
+     - Fraunces  (display serif): the "engraved seal" voice — page titles only.
+     - IBM Plex Sans (body/UI): technical, legible, built for dense forms.
+     - IBM Plex Mono (data): Voter IDs, Aadhaar numbers, audit timestamps —
+       anything that reads like a ledger entry lines up on a mono grid.
+   ============================================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+/* ============================================================================
+   2. DESIGN TOKENS
+   Every color, size and timing value the rest of the file reads from.
+   Palette is named around the "civic ledger" concept and every accent below
+   was chosen to hit at least 4.5:1 contrast against the text color it is
+   paired with (white text on civic-blue/teal/crimson/violet; dark ink text
+   on gold, which is too light for white text to sit on comfortably).
+   ============================================================================ */
+:root {
+    /* --- Ink (navy) surfaces — the "desk" the ballot paper sits on --- */
+    --ink-950: #0B1B33;   /* deepest surface: page background, super-admin accent */
+    --ink-800: #16294D;   /* secondary panel navy */
+    --ink-700: #223B67;   /* borders / dividers on dark surfaces */
+
+    /* --- Paper surfaces — the "ballot paper" cards sit on the desk --- */
+    --paper: #F5F7FB;         /* card surface */
+    --paper-muted: #E4E9F2;   /* subtle inset panels, dividers on paper */
+    --paper-strong: #FFFFFF;  /* inputs, highest-contrast surface */
+
+    /* --- Text on paper --- */
+    --ink-text: #101828;    /* primary body text */
+    --muted-text: #5B6478;  /* secondary / helper text */
+
+    /* --- Accent palette (semantic, not decorative) --- */
+    --civic-blue: #2657A6;        /* primary action / links / info */
+    --civic-blue-dark: #1C4383;   /* primary action hover/active */
+    --verified-teal: #0B7A5F;     /* success / verified / active election */
+    --verified-teal-dark: #095F49;
+    --seal-crimson: #A6332A;      /* danger / fraud alerts / destructive */
+    --seal-crimson-dark: #832822;
+    --gold-foil: #C79A3D;         /* super-admin / highlight — pair with dark text */
+    --organizer-violet: #4B3876;  /* organizer role accent */
+    --organizer-violet-dark: #392A5C;
+    --slate: #4B5768;             /* neutral secondary action (e.g. "Back") */
+    --slate-dark: #38424F;
+
+    /* --- Typography --- */
+    --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+    --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
+
+    /* --- Spacing scale --- */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.5rem;
+    --space-6: 2rem;
+    --space-7: 3rem;
+    --space-8: 4rem;
+
+    /* --- Radius & elevation --- */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 18px;
+    --shadow-sm: 0 1px 2px rgba(11, 27, 51, 0.10);
+    --shadow-md: 0 10px 28px rgba(11, 27, 51, 0.18);
+    --shadow-lg: 0 24px 56px rgba(11, 27, 51, 0.30);
+
+    --transition-base: 180ms ease;
+
+    /*
+      Breakpoints (documented here; CSS custom properties cannot be used
+      inside @media conditions, so treat these as the source of truth
+      the media queries below implement):
+        --bp-sm:  600px  (large phones, small tablets)
+        --bp-md:  768px  (tablets)
+        --bp-lg:  1024px (small laptops / desktop)
+        --bp-xl:  1280px (wide desktop, container width cap only)
+    */
+}
+
+/* ============================================================================
+   3. RESET & BASE
+   ============================================================================ */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.55;
+    color: var(--ink-text);
+    display: flex;
+    justify-content: center;
+
+    /* ---- 4. Background & texture ----
+       A crafted navy gradient + fine seal-pattern replaces the previous
+       stock photo. This is a deliberate trade, not a simplification:
+       a photograph has unpredictable local contrast (a light sky behind
+       a light card = an accessibility failure waiting to happen) and is
+       an external asset that can fail to load. A designed gradient gives
+       full control over contrast everywhere, loads instantly, and reads
+       as "engraved ledger" rather than "stock background." */
+    background-color: var(--ink-950);
+    background-image:
+        radial-gradient(circle at 18% -8%, var(--ink-800), transparent 55%),
+        radial-gradient(circle at 100% 110%, var(--ink-700), transparent 45%),
+        repeating-linear-gradient(135deg, rgba(199, 154, 61, 0.035) 0 2px, transparent 2px 26px);
+    background-attachment: fixed;
+    background-size: cover, cover, 220px 220px;
+}
+
+/* ============================================================================
+   5. LAYOUT — CONTAINER & MOBILE-FIRST BREAKPOINTS
+   Base rules below are the mobile layout. Each min-width query only adds
+   what changes at that size — nothing is redefined from scratch.
+   ============================================================================ */
+.container {
+    width: 100%;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-4) var(--space-8);
+}
+
+@media (min-width: 600px) {
+    .container {
+        max-width: 90%;
+        padding: var(--space-7) var(--space-5) var(--space-8);
+    }
+}
+
+@media (min-width: 768px) {
+    .container {
+        max-width: 700px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .container {
+        max-width: 880px;
+        padding-top: var(--space-8);
+    }
+}
+
+@media (min-width: 1280px) {
+    .container {
+        max-width: 960px;
+    }
+}
+
+/* ============================================================================
+   6. TYPOGRAPHY
+   ============================================================================ */
+h1 {
+    position: relative;
+    isolation: isolate;
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.9rem, 5vw + 1rem, 3rem);
+    line-height: 1.1;
+    letter-spacing: 0.01em;
+    color: var(--paper);
+    margin: 0 0 var(--space-7);
+    padding-top: var(--space-6);
+    text-wrap: balance;
+}
+
+/* Signature device #1: the guilloché seal rosette, watermarked behind
+   every page's H1. Pure CSS gradients — no image request, scales with
+   the element, and reinforces "authenticated document" on every screen. */
+h1::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: min(320px, 80vw);
+    height: min(320px, 80vw);
+    transform: translate(-50%, -50%);
+    z-index: -1;
+    border-radius: 50%;
+    opacity: 0.9;
+    background:
+        repeating-conic-gradient(from 0deg, rgba(199, 154, 61, 0.16) 0deg 1.6deg, transparent 1.6deg 8deg),
+        radial-gradient(circle, transparent 52%, rgba(199, 154, 61, 0.14) 53%, transparent 55%),
+        radial-gradient(circle, transparent 68%, rgba(199, 154, 61, 0.10) 69%, transparent 71%);
+}
+
+h2, h3 {
+    font-family: var(--font-body);
+    font-weight: 700;
+    color: var(--ink-text);
+    margin-top: 0;
+    margin-bottom: var(--space-4);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--paper-muted);
+    letter-spacing: 0.01em;
+}
+
+h2 { font-size: 1.3rem; }
+h3 { font-size: 1.05rem; color: var(--muted-text); border-bottom-color: transparent; padding-bottom: 0; }
+
+p { margin: 0 0 var(--space-4); }
+
+a, .toggle-link {
+    color: var(--civic-blue);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color var(--transition-base);
+}
+a:hover, .toggle-link:hover {
+    color: var(--civic-blue-dark);
+}
+
+small { color: var(--muted-text); }
+
+/* ============================================================================
+   7. CARDS — with the second signature device: corner registration marks
+   ============================================================================ */
+.card {
+    position: relative;
+    background: var(--paper);
+    border: 1px solid rgba(11, 27, 51, 0.06);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    margin-bottom: var(--space-5);
+    box-shadow: var(--shadow-md);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Signature device #2: thin gold registration/crop marks in two opposing
+   corners, echoing the alignment marks used in security printing. Subtle
+   by design — restraint keeps it a detail, not decoration. */
+.card::before,
+.card::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+.card::before {
+    top: 10px;
+    left: 10px;
+    border-top: 2px solid var(--gold-foil);
+    border-left: 2px solid var(--gold-foil);
+}
+.card::after {
+    bottom: 10px;
+    right: 10px;
+    border-bottom: 2px solid var(--gold-foil);
+    border-right: 2px solid var(--gold-foil);
+}
+
+@media (min-width: 768px) {
+    .card { padding: var(--space-6); }
+}
+
+/* Sub-cards for dynamically-rendered elections & candidates */
+.election-card, .candidate-card {
+    background: var(--paper-strong);
+    border: 1px solid var(--paper-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    margin-bottom: var(--space-4);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.election-card:hover, .candidate-card:hover {
+    border-color: var(--civic-blue);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+}
+
+/* The "Identity Wallet" card in profile.html gets a distinct treatment —
+   styled like a physical ID card (dark, with monospaced credential rows)
+   rather than a plain form card. :has() targets it without touching HTML. */
+.card:has(#profVoterId) {
+    background: var(--ink-950);
+    color: var(--paper);
+    border-color: var(--ink-700);
+}
+.card:has(#profVoterId) h2 {
+    color: var(--paper);
+    border-bottom-color: var(--ink-700);
+}
+.card:has(#profVoterId) p { color: rgba(245, 247, 251, 0.85); }
+.card:has(#profVoterId)::before,
+.card:has(#profVoterId)::after { opacity: 0.8; }
+#profVoterId, #profAadhaar {
+    font-family: var(--font-mono);
+    letter-spacing: 0.06em;
+    color: var(--gold-foil);
+}
+#profStatus { font-weight: 600; color: var(--verified-teal); }
+.card:has(#profVoterId) #profStatus { color: #35C79A; }
+
+/* ============================================================================
+   8. FORMS
+   ============================================================================ */
+label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--muted-text);
+    margin-bottom: var(--space-2);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="number"],
+input[type="password"],
+input[type="date"],
+select,
+textarea {
+    display: block;
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    margin-bottom: var(--space-4);
+    border: 1.5px solid var(--paper-muted);
+    border-radius: var(--radius-md);
+    font-family: var(--font-body);
+    font-size: 1rem;
+    color: var(--ink-text);
+    background-color: var(--paper-strong);
+    transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+input::placeholder, textarea::placeholder {
+    /* Full opacity, not the usual 0.6–0.8 browsers default to: on the
+       --paper-strong white input fill, muted-text at reduced opacity
+       measured under 4:1 contrast — legible-ish but a fail against WCAG
+       AA. Full-strength muted-text clears ~5.9:1 while still reading as
+       clearly secondary to typed (ink-text) content. */
+    color: var(--muted-text);
+    opacity: 1;
+}
+
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--civic-blue);
+    box-shadow: 0 0 0 4px rgba(38, 87, 166, 0.18), inset 0 2px 4px rgba(11, 27, 51, 0.05);
+    background-color: var(--paperStrong);
+    transform: translateY(-1px);
+    transition: all 250ms cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+textarea { resize: vertical; min-height: 5rem; }
+
+/* Government-ID / Voter-ID fields read like ledger entries */
+#regAadhaar, #regVoterId {
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+}
+
+/* Several pages group related fields in an inline `style="display:flex"`
+   wrapper. We can't safely remove `display:flex` (it's an inline style
+   and would need !important to override), but nothing sets a direction,
+   so we can make those rows stack on narrow phones without any conflict. */
+@media (max-width: 599px) {
+    div[style*="display: flex"] {
+        flex-direction: column;
+    }
+    div[style*="display: flex"] > * {
+        margin-bottom: var(--space-3);
+    }
+}
+
+/* ============================================================================
+   9. BUTTONS
+   ============================================================================ */
+button {
+    font-family: var(--font-body);
+    color: white;
+    border: none;
+    padding: var(--space-3) var(--space-5);
+    border-radius: var(--radius-md);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    box-sizing: border-box;
+    display: inline-block;
+    box-shadow: var(--shadow-sm);
+    transition: transform 150ms ease, box-shadow var(--transition-base), filter var(--transition-base);
+}
+
+/* Default color when no inline background-color is present (register.html
+   and any future markup) */
+button:not([style*="background-color"]) {
+    background-color: var(--civic-blue);
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+    filter: brightness(1.06);
+}
+button:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+}
+button:disabled {
+    background: var(--paper-muted) !important;
+    color: var(--muted-text);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+    filter: none;
+}
+
+/* Forward-compatible semantic button classes — not required for this
+   stylesheet to work today (see the inline-style bridge below), but
+   recommended for new markup; see the class-recommendations summary. */
+.btn { /* shares base `button` rules above */ }
+.btn-primary   { background-color: var(--civic-blue) !important; }
+.btn-primary:hover { background-color: var(--civic-blue-dark) !important; }
+.btn-success   { background-color: var(--verified-teal) !important; }
+.btn-success:hover { background-color: var(--verified-teal-dark) !important; }
+.btn-danger    { background-color: var(--seal-crimson) !important; }
+.btn-danger:hover { background-color: var(--seal-crimson-dark) !important; }
+.btn-organizer { background-color: var(--organizer-violet) !important; }
+.btn-organizer:hover { background-color: var(--organizer-violet-dark) !important; }
+.btn-super-admin { background-color: var(--ink-950) !important; border: 1px solid var(--gold-foil) !important; }
+.btn-neutral   { background-color: var(--slate) !important; }
+.btn-neutral:hover { background-color: var(--slate-dark) !important; }
+.btn-gold      { background-color: var(--gold-foil) !important; color: var(--ink-950) !important; }
+
+/* ============================================================================
+   10. STATUS MESSAGES & BADGES
+   ============================================================================ */
+p[id$="Message"] {
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+    margin-top: var(--space-4);
+    letter-spacing: 0.01em;
+}
+
+/* Election phase badges, e.g. <strong style="color:#2ecc71">Phase: ACTIVE</strong> */
+strong[style*="color"] {
+    display: inline-block;
+    background: var(--paper-muted);
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid rgba(11, 27, 51, 0.06);
+}
+
+/* ============================================================================
+   11. TABLES — audit / fraud logs
+   ============================================================================ */
+#logsContainer table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    font-family: var(--font-mono);
+}
+#logsContainer th {
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    font-family: var(--font-body);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+    color: var(--muted-text);
+    border-bottom: 2px solid var(--paper-muted);
+}
+#logsContainer td {
+    padding: var(--space-2) var(--space-3);
+}
+#logsContainer tr:nth-child(even) td {
+    background-color: var(--paper-muted);
+}
+
+/* ============================================================================
+   12. ROLE ACCENTS — Super Admin / Organizer / Voter
+   Static section borders already exist in admin.html inline; we bridge
+   their exact hex values below. Section headers get matching icons'
+   color pulled from the same token so the whole block reads as one role.
+   ============================================================================ */
+#superAdminSection h2 { color: var(--ink-950); }
+#organizerSection h2 { color: var(--organizer-violet); }
+
+/* ============================================================================
+   13. RESPONSIVE GRIDS FOR DYNAMICALLY-RENDERED LISTS
+   These containers (#elections, #candidates, #results) are populated by
+   script.js with no inline styles of their own, so they can move from a
+   single mobile column to a multi-column grid with no specificity fight.
+   ============================================================================ */
+@media (min-width: 768px) {
+    #elections, #candidates, #results {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: var(--space-4);
+        align-items: start;
+    }
+    #elections .election-card,
+    #candidates .candidate-card,
+    #results .candidate-card {
+        margin-bottom: 0;
+    }
+}
+
+/* ============================================================================
+   14. ACCESSIBILITY
+   ============================================================================ */
+:focus-visible {
+    outline: 3px solid var(--civic-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+.card:has(#profVoterId) :focus-visible {
+    outline-color: var(--gold-foil);
+}
+
+@media (prefers-contrast: more) {
+    :root {
+        --paper-muted: #C7D0E0;
+        --muted-text: #333B4A;
+    }
+    .card { border-color: var(--ink-700); }
+}
+
+/* ============================================================================
+   15. LEGACY INLINE-STYLE COMPATIBILITY BRIDGE
+   ----------------------------------------------------------------------------
+   admin.html, dashboard.html, index.html and script.js set colors directly
+   via inline `style="background-color: …"` (both hard-coded in markup and
+   written at runtime through `element.style.backgroundColor = …`, which
+   browsers normalize to rgb() once touched by JS). Inline styles always
+   out-rank an external stylesheet, so recoloring them requires attribute
+   selectors AND `!important` — that is a deliberate, narrowly-scoped
+   exception to "avoid !important," not a general pattern used elsewhere in
+   this file. Selectors below match both the hex and rgb() spellings of
+   each legacy color so the bridge holds however the color was written.
+   The durable fix is swapping these inline styles for the `.btn-*` classes
+   defined in section 9 — see the class recommendations in the summary.
+   ============================================================================ */
+
+/* Danger / fraud / logout → seal-crimson
+   :not(.card):not(.toggle-link) on every rule in this bridge keeps the
+   "become a solid colored component" treatment scoped to what it was
+   built for — buttons and p[id$="Message"] status banners. Without that
+   exclusion, the same substring match also caught two things it was
+   never meant to: (1) .card elements that use these hex values only for
+   a decorative 5px border-left accent stripe (§16 below restores just
+   that stripe, from the token palette, without touching the card's
+   background), and (2) .toggle-link text links (§16 restores their
+   intended underlined-text color). Left uncorrected, both cases forced
+   background-color + color:white across the whole element while child
+   headings/paragraphs kept their own dark ink-text/muted-text rules —
+   producing dark-on-saturated and gray-on-saturated text with contrast
+   as low as ~1.4:1, i.e. effectively invisible. */
+[style*="#e74c3c"]:not(.card):not(.toggle-link), [style*="rgb(231, 76, 60)"]:not(.card):not(.toggle-link),
+[style*="#c0392b"]:not(.card):not(.toggle-link), [style*="rgb(192, 57, 43)"]:not(.card):not(.toggle-link),
+[style*="color: red"]:not(.card):not(.toggle-link), [style*="color:red"]:not(.card):not(.toggle-link) {
+    background-color: var(--seal-crimson) !important;
+    color: white !important;
+    border-color: var(--seal-crimson) !important;
+}
+td[style*="#c0392b"], tr[style*="#c0392b"] {
+    background-color: transparent !important;
+    color: var(--seal-crimson-dark) !important;
+}
+
+/* Success / approve / verified → verified-teal (scoping: see comment above) */
+[style*="#2ecc71"]:not(.card):not(.toggle-link), [style*="rgb(46, 204, 113)"]:not(.card):not(.toggle-link),
+[style*="#27ae60"]:not(.card):not(.toggle-link), [style*="rgb(39, 174, 96)"]:not(.card):not(.toggle-link) {
+    background-color: var(--verified-teal) !important;
+    color: white !important;
+    border-color: var(--verified-teal) !important;
+}
+
+/* Warning / loading / pending → gold-foil (dark text for contrast; scoping: see comment above) */
+[style*="#f39c12"]:not(.card):not(.toggle-link), [style*="rgb(243, 156, 18)"]:not(.card):not(.toggle-link) {
+    background-color: var(--gold-foil) !important;
+    color: var(--ink-950) !important;
+    border-color: var(--gold-foil) !important;
+}
+
+/* Info / primary action / OTP → civic-blue (scoping: see comment above) */
+[style*="#3498db"]:not(.card):not(.toggle-link), [style*="rgb(52, 152, 219)"]:not(.card):not(.toggle-link) {
+    background-color: var(--civic-blue) !important;
+    color: white !important;
+    border-color: var(--civic-blue) !important;
+}
+
+/* Organizer / candidate scrutiny → organizer-violet (scoping: see comment above) */
+[style*="#9b59b6"]:not(.card):not(.toggle-link), [style*="rgb(155, 89, 182)"]:not(.card):not(.toggle-link) {
+    background-color: var(--organizer-violet) !important;
+    color: white !important;
+    border-color: var(--organizer-violet) !important;
+}
+
+/* Neutral back / secondary → slate (scoping: see comment above) */
+[style*="#7f8c8d"]:not(.card):not(.toggle-link), [style*="rgb(127, 140, 141)"]:not(.card):not(.toggle-link),
+[style*="#34495e"]:not(.card):not(.toggle-link), [style*="rgb(52, 73, 94)"]:not(.card):not(.toggle-link) {
+    background-color: var(--slate) !important;
+    color: white !important;
+    border-color: var(--slate) !important;
+}
+
+/* Super Admin → deepest ink + gold border, "seal of authority".
+   Scoped the same way (see comment above) — this keeps the dark/gold
+   treatment on the 👑 Super Admin Panel *button* (dashboard.html), which
+   is the intended high-impact CTA, while the "Global Super Admin" header
+   .card on admin.html now falls through to §16, keeping it a normal
+   light paper card with a dark navy accent stripe instead of a full
+   dark-ink fill (its h2/p children weren't designed for that background). */
+[style*="#2c3e50"]:not(.card):not(.toggle-link), [style*="rgb(44, 62, 80)"]:not(.card):not(.toggle-link) {
+    background-color: var(--ink-950) !important;
+    color: var(--paper) !important;
+    border: 1px solid var(--gold-foil) !important;
+}
+
+/* Containers with hard-coded light backgrounds (pending orgs, scrutiny,
+   audit/fraud logs, org list) — recast in the paper/ink token system */
+#pendingOrgsContainer, #scrutinyContainer, #logsContainer, #profOrgs {
+    background-color: var(--paper-muted) !important;
+    border: 1px solid rgba(11, 27, 51, 0.08) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* Divider rules with the old #eee color */
+hr[style*="#eee"] {
+    border-top-color: var(--paper-muted) !important;
+}
+
+/* Muted placeholder/empty-state text hard-coded to the old gray */
+[style*="#7f8c8d"]:is(p, li, small) {
+    background: none !important;
+    color: var(--muted-text) !important;
+    border: none !important;
+}
+
+/* ============================================================================
+   16. CARD ACCENT STRIPES & TOGGLE-LINK COLOR — the other half of §15's
+   scoping fix. admin.html and dashboard.html mark each section .card with
+   a hard-coded `border-left: 5px solid #hex` for quick color-coding
+   (super admin / approve / audit / organizer / phases / scrutiny /
+   request-org). §15 now deliberately skips those .card elements, so we
+   restore *only* the border-left color here, mapped onto the matching
+   design token — every card keeps its normal light paper background and
+   normal dark ink-text/muted-text, so contrast never depends on which
+   accent color a section happens to have. Same idea for .toggle-link:
+   index.html hard-codes blue for "Register/Login" toggles and crimson
+   for "Cancel"; we preserve that semantic distinction on the token
+   palette instead of letting it fall through to a solid-fill button look.
+   ============================================================================ */
+.card[style*="#2c3e50"] { border-left-color: var(--ink-950) !important; }
+.card[style*="#2ecc71"] { border-left-color: var(--verified-teal) !important; }
+.card[style*="#e74c3c"] { border-left-color: var(--seal-crimson) !important; }
+.card[style*="#f39c12"] { border-left-color: var(--gold-foil) !important; }
+.card[style*="#3498db"] { border-left-color: var(--civic-blue) !important; }
+.card[style*="#9b59b6"] { border-left-color: var(--organizer-violet) !important; }
+
+.toggle-link[style*="#3498db"] { color: var(--civic-blue) !important; }
+.toggle-link[style*="#3498db"]:hover { color: var(--civic-blue-dark) !important; }
+.toggle-link[style*="#e74c3c"] { color: var(--seal-crimson) !important; }
+.toggle-link[style*="#e74c3c"]:hover { color: var(--seal-crimson-dark) !important; }
+
+/* ============================================================================
+   17. CIVIC ANIMATIONS (STAMPS & SECURITY MARKS)
+   ============================================================================ */
+
+/* Animate the gold registration marks on hover to emphasize security focus */
+.card::before, .card::after {
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.4s ease;
+}
+.card:hover::before { 
+    transform: translate(-4px, -4px) scale(1.1); 
+    opacity: 0.9; 
+}
+.card:hover::after { 
+    transform: translate(4px, 4px) scale(1.1); 
+    opacity: 0.9; 
+}
+
+/* Rubber-stamp animation for phase badges and status labels */
+@keyframes inkStamp {
+    0% { transform: scale(1.8) rotate(-8deg); opacity: 0; filter: blur(2px); }
+    50% { transform: scale(0.95) rotate(2deg); opacity: 1; filter: blur(0); }
+    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+strong[style*="color"] {
+    animation: inkStamp 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    transform-origin: center;
+    box-shadow: inset 0 0 0 1px rgba(11, 27, 51, 0.1);
+}
+
+/* Identity Wallet "Security Foil" Shimmer */
+@keyframes foilShimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+}
+
+.card:has(#profVoterId) h2 {
+    background: linear-gradient(110deg, var(--paper) 20%, var(--gold-foil) 40%, var(--paper) 60%);
+    background-size: 200% auto;
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: foilShimmer 6s linear infinite;
+}
