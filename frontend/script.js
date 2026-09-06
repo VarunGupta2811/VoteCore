@@ -1,5 +1,20 @@
 const API_URL = "http://127.0.0.1:5000";
 
+// Attach the server-issued anti-CSRF token to authenticated write requests.
+const nativeFetch = window.fetch.bind(window);
+window.fetch = function (input, init = {}) {
+    const url = typeof input === "string" ? input : input.url;
+    const method = (init.method || (input instanceof Request && input.method) || "GET").toUpperCase();
+    if (url.startsWith(API_URL) && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+        const csrfToken = localStorage.getItem("votingCsrfToken");
+        if (csrfToken) {
+            init.headers = new Headers(init.headers || {});
+            init.headers.set("X-CSRF-Token", csrfToken);
+        }
+    }
+    return nativeFetch(input, init);
+};
+
 // ============================================================
 // UI TOGGLE & LOGIN STATUS
 // ============================================================
@@ -21,6 +36,7 @@ function toggleForms() {
 }
 
 async function checkLoginStatus() {
+    window.scrollTo(0, 0);
     const user = await refreshUserFromBackend();
     if (user) {
         if (user.is_super_admin || user.is_organizer) {
@@ -84,6 +100,7 @@ async function refreshUserFromBackend() {
         if (!response.ok) return getCurrentUser();
         const data = await response.json();
         if (data.user) {
+            if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
             saveCurrentUser(data.user);
             return data.user;
         }
@@ -182,7 +199,7 @@ async function registerUser() {
         setTimeout(() => { window.location.href = "index.html"; }, 2000);
     } catch (error) {
         messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Cannot connect to backend.";
+        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
     }
 }
 
@@ -234,7 +251,7 @@ async function login() {
         }
     } catch (error) {
         messageElement.style.color = "#e74c3c";
-        messageElement.innerText = "Cannot connect to backend.";
+        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
     }
 }
 
@@ -267,6 +284,7 @@ async function verifyOTP() {
             return;
         }
 
+        if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
         if (data.user) saveCurrentUser(data.user);
 
         messageElement.style.backgroundColor = "#2ecc71";
@@ -281,7 +299,7 @@ async function verifyOTP() {
         }, 1000);
     } catch (error) {
         messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Cannot connect to backend.";
+        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
     }
 }
 
@@ -294,6 +312,25 @@ async function logout() {
         await fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" });
     } catch (error) {}
     localStorage.removeItem("votingUser");
+    localStorage.removeItem("votingCsrfToken");
+    window.location.href = "index.html";
+}
+
+async function logoutAllDevices() {
+    if (!confirm("Sign out of VoteCore on every device?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/auth/logout-all`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) {
+            alert(data.error || "Unable to sign out all devices.");
+            return;
+        }
+    } catch (error) {
+        alert("Unable to sign out all devices.");
+        return;
+    }
+    localStorage.removeItem("votingUser");
+    localStorage.removeItem("votingCsrfToken");
     window.location.href = "index.html";
 }
 
@@ -302,11 +339,23 @@ async function logout() {
 // ============================================================
 
 async function loadProfile() {
+    const orgsList = document.getElementById("profOrgs");
+    const showOrganizationState = (message, state = "empty") => {
+        if (!orgsList) return;
+        orgsList.innerHTML = "";
+        const item = document.createElement("li");
+        item.className = `organization-state organization-state-${state}`;
+        item.textContent = message;
+        orgsList.appendChild(item);
+    };
+
+    showOrganizationState("Loading your organizations…", "loading");
     try {
         const response = await fetch(`${API_URL}/api/auth/profile`, { credentials: "include" });
         const data = await response.json();
         if (!response.ok) {
-            window.location.href = "index.html";
+            if (response.status === 401) window.location.href = "index.html";
+            else showOrganizationState(data.error || "Unable to load your organizations. Please try again.", "error");
             return;
         }
 
@@ -319,12 +368,12 @@ async function loadProfile() {
         document.getElementById("profAadhaar").innerText = p.aadhaar;
         document.getElementById("profStatus").innerText = p.is_verified ? "✅ Verified & Locked" : "❌ Unverified";
 
-        const orgsList = document.getElementById("profOrgs");
         orgsList.innerHTML = "";
-        if (p.organizations.length === 0) {
-            orgsList.innerHTML = "<li style='list-style: none; margin-left: -20px; color: #7f8c8d;'>No organizations joined yet.</li>";
+        const organizations = Array.isArray(p.organizations) ? p.organizations : [];
+        if (organizations.length === 0) {
+            showOrganizationState("You have not joined any organizations yet.");
         } else {
-            p.organizations.forEach(org => {
+            organizations.forEach(org => {
                 const li = document.createElement("li");
                 li.innerHTML = `<strong>${escapeHtml(org.org_name)}</strong> (Role: ${escapeHtml(org.role)})`;
                 orgsList.appendChild(li);
@@ -332,6 +381,9 @@ async function loadProfile() {
         }
     } catch (e) {
         console.error("Profile Error:", e);
+        showOrganizationState("Cannot connect to the backend. Start the backend server, then refresh this page.", "error");
+        const status = document.getElementById("profStatus");
+        if (status) status.innerText = "Unavailable";
     }
 }
 
@@ -516,7 +568,11 @@ async function loadResults() {
     try {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/results`, { method: "GET", credentials: "include" });
         const data = await response.json();
-        
+        if (!response.ok) {
+            resultsElement.innerText = data.error || "Results are not available.";
+            return;
+        }
+
         const results = data.results || [];
         if (results.length === 0) { resultsElement.innerText = "No results available yet."; return; }
         
@@ -858,7 +914,7 @@ async function loadFraudLogs() {
         let html = '<table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">';
         html += '<tr style="border-bottom: 2px solid #ccc;"><th>ID</th><th>User</th><th>Fraud Type</th><th>Time</th></tr>';
         data.fraud_logs.forEach(log => {
-            html += `<tr style="border-bottom: 1px solid #ddd; color: #c0392b;">
+            html += `<tr class="fraud-log-row">
                 <td style="padding: 8px;">${log.fraud_id}</td>
                 <td style="padding: 8px;">${escapeHtml(log.user_name)}</td>
                 <td style="padding: 8px;"><strong>${escapeHtml(log.fraud_type)}</strong></td>

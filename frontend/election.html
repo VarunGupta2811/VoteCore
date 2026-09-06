@@ -1,33 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Election - VoteCore</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body onload="loadElection()">
-    <div class="container">
-        <h1>VoteCore Election</h1>
-        <div class="card">
-            <h2 id="welcome">Welcome!</h2>
-            <h3 id="electionTitle">Loading Election...</h3>
-            <p id="electionDescription"></p>
-            <p id="electionStatus" style="font-weight: bold;"></p>
-
-            <h3>Candidates</h3>
-            <div id="candidates">
-                <!-- Candidates will be loaded here dynamically -->
-            </div>
-
-            <!-- FIXED BACK BUTTON -->
-            <div style="margin-top: 20px;">
-                <button onclick="window.location.href='dashboard.html'" style="background-color: #7f8c8d; width: 100%;">
-                    ⬅ Back to Dashboard
-                </button>
-            </div>
-        </div>
-    </div>
-    <script src="script.js"></script>
-</body>
-</html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Election — VoteCore</title><link rel="stylesheet" href="style.css"></head>
+<body class="app-page" onload="loadElection()"><main class="container app-shell">
+    <header class="app-header"><a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a><a class="header-link" href="dashboard.html">← Dashboard</a></header>
+    <section class="page-hero compact-hero"><div><p class="eyebrow">Official ballot</p><h1>Choose with confidence.</h1><p>Every ballot is securely sealed and can only be cast once.</p></div><div class="hero-number">02<span>Ballot</span></div></section>
+    <section class="card election-detail-card"><div class="section-heading"><div><p class="card-kicker" id="welcome">Welcome!</p><h2 id="electionTitle">Loading election...</h2></div><p id="electionStatus" class="status-pill"></p></div><p id="electionDescription" class="election-description"></p><div class="content-divider"></div><div class="section-heading compact"><div><p class="card-kicker">Candidate lineup</p><h2>Meet the candidates</h2></div></div><div id="candidates" class="candidate-grid"></div></section>
+    <footer class="page-actions single"><button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to dashboard</button></footer>
+</main><script src="script.js"></script></body></html>
