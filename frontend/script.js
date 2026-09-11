@@ -1,29 +1,33 @@
 const API_URL = "http://127.0.0.1:5000";
 
-// Attach the server-issued anti-CSRF token to authenticated write requests.
+let currentAuthAction = 'login';
+let pendingRegEmail = '';
+let myElectionsCache = []; // Remembers the real database statuses for the Organizer Panel
+
 const nativeFetch = window.fetch.bind(window);
 window.fetch = function (input, init = {}) {
-    const url = typeof input === "string" ? input : input.url;
+    let url = typeof input === "string" ? input : input.url;
     const method = (init.method || (input instanceof Request && input.method) || "GET").toUpperCase();
-    if (url.startsWith(API_URL) && !["GET", "HEAD", "OPTIONS"].includes(method)) {
-        const csrfToken = localStorage.getItem("votingCsrfToken");
-        if (csrfToken) {
-            init.headers = new Headers(init.headers || {});
-            init.headers.set("X-CSRF-Token", csrfToken);
+    if (url.startsWith(API_URL)) {
+        if (method === "GET") {
+            const separator = url.includes('?') ? '&' : '?';
+            url = `${url}${separator}_t=${new Date().getTime()}`;
+        }
+        if (!["GET", "HEAD", "OPTIONS"].includes(method) && !url.endsWith("/api/auth/logout")) {
+            const csrfToken = localStorage.getItem("votingCsrfToken");
+            if (csrfToken) {
+                init.headers = new Headers(init.headers || {});
+                init.headers.set("X-CSRF-Token", csrfToken);
+            }
         }
     }
-    return nativeFetch(input, init);
+    return nativeFetch(url, init);
 };
-
-// ============================================================
-// UI TOGGLE & LOGIN STATUS
-// ============================================================
 
 function toggleForms() {
     const loginForm = document.getElementById("loginForm");
     const registerForm = document.getElementById("registerForm");
     const otpForm = document.getElementById("otpForm");
-    
     if (loginForm && loginForm.style.display === "none" && (!otpForm || otpForm.style.display === "none")) {
         loginForm.style.display = "block";
         if (registerForm) registerForm.style.display = "none";
@@ -38,27 +42,13 @@ function toggleForms() {
 async function checkLoginStatus() {
     window.scrollTo(0, 0);
     const user = await refreshUserFromBackend();
-    if (user) {
-        if (user.is_super_admin || user.is_organizer) {
-            window.location.href = "admin.html";
-        } else {
-            window.location.href = "dashboard.html";
-        }
-    }
+    if (user) window.location.href = (user.is_super_admin || user.is_organizer) ? "admin.html" : "dashboard.html";
 }
-
-// ============================================================
-// USER MANAGEMENT
-// ============================================================
 
 function getCurrentUser() {
     const savedUser = localStorage.getItem("votingUser");
     if (!savedUser) return null;
-    try {
-        return JSON.parse(savedUser);
-    } catch (error) {
-        return null;
-    }
+    try { return JSON.parse(savedUser); } catch (e) { return null; }
 }
 
 function saveCurrentUser(user) {
@@ -69,24 +59,10 @@ function saveCurrentUser(user) {
 function displayWelcome() {
     const welcome = document.getElementById("welcome");
     if (!welcome) return;
-
     const user = getCurrentUser();
-    if (!user) {
-        welcome.innerText = "Welcome!";
-        return;
-    }
-
-    const firstName = user.first_name || "";
-    const lastName = user.last_name || "";
-    const fullName = `${firstName} ${lastName}`.trim();
-
-    if (fullName) {
-        welcome.innerText = `Welcome, ${fullName}!`;
-    } else if (user.email) {
-        welcome.innerText = `Welcome, ${user.email}!`;
-    } else {
-        welcome.innerText = "Welcome!";
-    }
+    if (!user) { welcome.innerText = "Welcome!"; return; }
+    const fullName = `${user.first_name || ""} ${user.last_name || ""}`.trim();
+    welcome.innerText = fullName ? `Welcome, ${fullName}!` : (user.email ? `Welcome, ${user.email}!` : "Welcome!");
 }
 
 function escapeHtml(value) {
@@ -105,212 +81,137 @@ async function refreshUserFromBackend() {
             return data.user;
         }
         return getCurrentUser();
-    } catch (error) {
-        return getCurrentUser();
-    }
+    } catch (e) { return getCurrentUser(); }
 }
-
-// ============================================================
-// REGISTER (WITH GOV ID VERIFICATION)
-// ============================================================
 
 async function registerUser() {
     const firstName = document.getElementById("regFirstName").value.trim();
-    const middleName = document.getElementById("regMiddleName").value.trim();
     const lastName = document.getElementById("regLastName").value.trim();
     const mobile = document.getElementById("regMobile").value.trim();
     const email = document.getElementById("regEmail").value.trim();
-    const country = document.getElementById("regCountry").value.trim();
-    const state = document.getElementById("regState").value.trim();
     const password = document.getElementById("regPassword").value;
     const confirmPassword = document.getElementById("regConfirmPassword").value;
     const dob = document.getElementById("regDob").value;
     const aadhaar = document.getElementById("regAadhaar").value.trim();
     const voterId = document.getElementById("regVoterId").value.trim().toUpperCase();
+    const country = document.getElementById("regCountry") ? document.getElementById("regCountry").value : "India";
+    const state = document.getElementById("regState") ? document.getElementById("regState").value : "";
     
-    const messageElement = document.getElementById("regMessage");
-    messageElement.style.display = "block";
-    messageElement.style.color = "white";
+    const msg = document.getElementById("regMessage");
+    msg.style.display = "block"; 
+    msg.style.color = "white";
 
-    if (!firstName || !lastName || !email || !mobile || !password || !confirmPassword || !dob || !aadhaar || !voterId) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "All fields marked with * are required.";
+    if (!firstName || !lastName || !email || !mobile || !password || !confirmPassword || !dob || !aadhaar || !voterId || !state) {
+        msg.style.backgroundColor = "#e74c3c"; 
+        msg.innerText = "All fields marked with * are required."; 
         return;
     }
-
     if (password !== confirmPassword) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Passwords do not match.";
+        msg.style.backgroundColor = "#e74c3c"; 
+        msg.innerText = "Passwords do not match."; 
         return;
     }
-
-    const aadhaarRegex = /^\d{12}$/;
-    if (!aadhaarRegex.test(aadhaar)) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Invalid format: 12-digit numeric ID required.";
-        return;
-    }
-
-    const voterIdRegex = /^[a-zA-Z]{3}\d{7,10}$/;
-    if (!voterIdRegex.test(voterId)) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Invalid format: Voter ID usually starts with 3 letters followed by numbers.";
-        return;
-    }
-
-    const dobDate = new Date(dob);
-    const today = new Date();
-    let age = today.getFullYear() - dobDate.getFullYear();
-    const monthDifference = today.getMonth() - dobDate.getMonth();
-    if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < dobDate.getDate())) {
-        age--;
-    }
-
-    if (age < 18) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = `Registration Denied: You are ${age} years old. You must be 18+ to register.`;
-        return;
-    }
-
-    messageElement.style.backgroundColor = "#f39c12"; 
-    messageElement.innerText = "Verifying Identity and Registering...";
+    msg.style.backgroundColor = "#f39c12"; 
+    msg.innerText = "Verifying Requirements & Generating OTP...";
 
     try {
         const response = await fetch(`${API_URL}/api/auth/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                first_name: firstName, middle_name: middleName, last_name: lastName,
-                mobile: mobile, email: email, country: country, state: state,
-                password: password, dob: dob, aadhaar: aadhaar, voter_id: voterId
+                first_name: firstName, last_name: lastName, mobile: mobile, email: email,
+                password: password, dob: dob, aadhaar: aadhaar, voter_id: voterId,
+                country: country, state: state
             })
         });
-
         const data = await response.json();
+        if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
-        if (!response.ok) {
-            messageElement.style.backgroundColor = "#e74c3c";
-            messageElement.innerText = data.error || "Registration failed.";
-            return;
+        if (data.requires_otp) {
+            currentAuthAction = 'register';
+            pendingRegEmail = data.email;
+            document.getElementById("registerForm").style.display = "none";
+            document.getElementById("otpForm").style.display = "block";
+            const otpMsg = document.getElementById("otpMessage");
+            otpMsg.style.display = "block"; otpMsg.style.backgroundColor = "#3498db";
+            otpMsg.style.color = "white"; otpMsg.innerText = "Registration OTP Sent to email!";
         }
-
-        messageElement.style.backgroundColor = "#2ecc71";
-        messageElement.innerText = "Registration successful! Redirecting to login...";
-        setTimeout(() => { window.location.href = "index.html"; }, 2000);
-    } catch (error) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
-    }
+    } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
 }
 
-// ============================================================
-// LOGIN & OTP VERIFICATION
-// ============================================================
-
 async function login() {
-    const emailElement = document.getElementById("email");
-    const passwordElement = document.getElementById("password");
-    const messageElement = document.getElementById("message");
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const msg = document.getElementById("message");
 
-    const email = emailElement.value.trim();
-    const password = passwordElement.value;
-
-    if (!email || !password) {
-        messageElement.innerText = "Please enter email and password.";
-        return;
-    }
-
-    messageElement.style.color = "#333";
-    messageElement.innerText = "Authenticating...";
+    if (!email || !password) { msg.innerText = "Enter email and password."; return; }
+    msg.style.color = "#333"; msg.innerText = "Authenticating...";
 
     try {
         const response = await fetch(`${API_URL}/api/auth/login`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: email, password: password })
         });
-
         const data = await response.json();
-
-        if (!response.ok) {
-            messageElement.style.color = "#e74c3c";
-            messageElement.innerText = data.error || "Invalid email or password.";
-            return;
-        }
+        if (!response.ok) { msg.style.color = "#e74c3c"; msg.innerText = data.error; return; }
 
         if (data.requires_otp) {
+            currentAuthAction = 'login';
             document.getElementById("loginForm").style.display = "none";
             document.getElementById("otpForm").style.display = "block";
-            
             const otpMsg = document.getElementById("otpMessage");
-            otpMsg.style.display = "block";
-            otpMsg.style.backgroundColor = "#3498db";
-            otpMsg.style.color = "white";
-            otpMsg.innerText = "OTP Sent to email! (Check server terminal if email fails)";
+            otpMsg.style.display = "block"; otpMsg.style.backgroundColor = "#3498db";
+            otpMsg.style.color = "white"; otpMsg.innerText = "OTP Sent to email! (Check server terminal if email fails)";
         }
-    } catch (error) {
-        messageElement.style.color = "#e74c3c";
-        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
-    }
+    } catch (e) { msg.style.color = "#e74c3c"; msg.innerText = "Backend is offline."; }
 }
 
 async function verifyOTP() {
     const otpCode = document.getElementById("otpCode").value.trim();
-    const messageElement = document.getElementById("otpMessage");
+    const msg = document.getElementById("otpMessage");
 
-    if (!otpCode || otpCode.length !== 6) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Please enter a valid 6-digit OTP.";
-        return;
-    }
+    if (!otpCode || otpCode.length !== 6) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Enter a valid 6-digit OTP."; return; }
+    msg.style.backgroundColor = "#f39c12"; msg.innerText = "Verifying...";
 
-    messageElement.style.backgroundColor = "#f39c12";
-    messageElement.innerText = "Verifying...";
+    if (currentAuthAction === 'register') {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/register-verify`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: pendingRegEmail, otp: otpCode })
+            });
+            const data = await response.json();
+            if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
-    try {
-        const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ otp: otpCode })
-        });
+            msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Registration verified! Redirecting to login...";
+            setTimeout(() => { 
+                document.getElementById("otpForm").style.display = "none";
+                document.getElementById("loginForm").style.display = "block";
+                document.getElementById("email").value = pendingRegEmail;
+                pendingRegEmail = '';
+                msg.style.display = "none";
+            }, 2000);
+        } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
+    } else {
+        try {
+            const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
+                method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ otp: otpCode })
+            });
+            const data = await response.json();
+            if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            messageElement.style.backgroundColor = "#e74c3c";
-            messageElement.innerText = data.error || "Invalid OTP.";
-            return;
-        }
-
-        if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
-        if (data.user) saveCurrentUser(data.user);
-
-        messageElement.style.backgroundColor = "#2ecc71";
-        messageElement.innerText = "Login Verified! Redirecting...";
-        
-        setTimeout(function () {
-            if (data.user && (data.user.is_super_admin || data.user.is_organizer)) {
-                window.location.href = "admin.html";
-            } else {
-                window.location.href = "dashboard.html";
-            }
-        }, 1000);
-    } catch (error) {
-        messageElement.style.backgroundColor = "#e74c3c";
-        messageElement.innerText = "Backend is not running. Start backend/start-server.bat, keep its window open, then refresh this page.";
+            if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
+            if (data.user) saveCurrentUser(data.user);
+            msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Login Verified! Redirecting...";
+            
+            setTimeout(() => {
+                window.location.href = (data.user && (data.user.is_super_admin || data.user.is_organizer)) ? "admin.html" : "dashboard.html";
+            }, 1000);
+        } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
     }
 }
 
-// ============================================================
-// LOGOUT
-// ============================================================
-
 async function logout() {
-    try {
-        await fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" });
-    } catch (error) {}
+    try { await fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" }); } catch (e) {}
     localStorage.removeItem("votingUser");
     localStorage.removeItem("votingCsrfToken");
     window.location.href = "index.html";
@@ -318,133 +219,63 @@ async function logout() {
 
 async function logoutAllDevices() {
     if (!confirm("Sign out of VoteCore on every device?")) return;
-    try {
-        const response = await fetch(`${API_URL}/api/auth/logout-all`, { method: "POST", credentials: "include" });
-        const data = await response.json();
-        if (!response.ok) {
-            alert(data.error || "Unable to sign out all devices.");
-            return;
-        }
-    } catch (error) {
-        alert("Unable to sign out all devices.");
-        return;
-    }
+    try { await fetch(`${API_URL}/api/auth/logout-all`, { method: "POST", credentials: "include" }); } catch (e) {}
     localStorage.removeItem("votingUser");
     localStorage.removeItem("votingCsrfToken");
     window.location.href = "index.html";
 }
 
-// ============================================================
-// PROFILE MANAGEMENT
-// ============================================================
-
 async function loadProfile() {
     const orgsList = document.getElementById("profOrgs");
-    const showOrganizationState = (message, state = "empty") => {
-        if (!orgsList) return;
-        orgsList.innerHTML = "";
-        const item = document.createElement("li");
-        item.className = `organization-state organization-state-${state}`;
-        item.textContent = message;
-        orgsList.appendChild(item);
-    };
-
-    showOrganizationState("Loading your organizations…", "loading");
     try {
         const response = await fetch(`${API_URL}/api/auth/profile`, { credentials: "include" });
         const data = await response.json();
-        if (!response.ok) {
-            if (response.status === 401) window.location.href = "index.html";
-            else showOrganizationState(data.error || "Unable to load your organizations. Please try again.", "error");
-            return;
-        }
+        if (!response.ok) { if (response.status === 401) window.location.href = "index.html"; return; }
 
         const p = data.profile;
-        document.getElementById("profMobile").value = p.mobile || "";
-        document.getElementById("profCountry").value = p.country || "";
-        document.getElementById("profState").value = p.state || "";
+        let mobileStr = p.mobile ? String(p.mobile) : "";
+        if (mobileStr.length > 4) { mobileStr = mobileStr.slice(0, -4) + "XXXX"; }
+        
+        document.getElementById("profName").value = `${p.first_name || ""} ${p.last_name || ""}`.trim();
+        document.getElementById("profEmail").value = p.email || "";
+        document.getElementById("profMobile").value = mobileStr;
         
         document.getElementById("profVoterId").innerText = p.voter_id;
         document.getElementById("profAadhaar").innerText = p.aadhaar;
         document.getElementById("profStatus").innerText = p.is_verified ? "✅ Verified & Locked" : "❌ Unverified";
 
         orgsList.innerHTML = "";
-        const organizations = Array.isArray(p.organizations) ? p.organizations : [];
-        if (organizations.length === 0) {
-            showOrganizationState("You have not joined any organizations yet.");
+        const orgs = Array.isArray(p.organizations) ? p.organizations : [];
+        if (orgs.length === 0) {
+            orgsList.innerHTML = "<li style='color: #64748b;'>No party allegiances registered.</li>";
         } else {
-            organizations.forEach(org => {
+            orgs.forEach(org => {
                 const li = document.createElement("li");
-                li.innerHTML = `<strong>${escapeHtml(org.org_name)}</strong> (Role: ${escapeHtml(org.role)})`;
+                li.style.padding = "10px 0";
+                li.style.borderBottom = "1px solid #334155";
+                li.innerHTML = `<strong>${escapeHtml(org.org_name)}</strong> <span style="float:right; color:#f39c12; font-size:0.8em; padding-top:4px;">${escapeHtml(org.role)}</span>`;
                 orgsList.appendChild(li);
             });
         }
-    } catch (e) {
-        console.error("Profile Error:", e);
-        showOrganizationState("Cannot connect to the backend. Start the backend server, then refresh this page.", "error");
-        const status = document.getElementById("profStatus");
-        if (status) status.innerText = "Unavailable";
-    }
+    } catch (e) {}
 }
-
-async function updateProfile() {
-    const mobile = document.getElementById("profMobile").value.trim();
-    const country = document.getElementById("profCountry").value.trim();
-    const state = document.getElementById("profState").value.trim();
-    const msg = document.getElementById("profMessage");
-
-    msg.style.display = "block";
-    msg.style.backgroundColor = "#f39c12";
-    msg.style.color = "white";
-    msg.innerText = "Updating...";
-
-    try {
-        const response = await fetch(`${API_URL}/api/auth/profile`, {
-            method: "PUT",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mobile: mobile, country: country, state: state })
-        });
-        const data = await response.json();
-        
-        if (response.ok) {
-            msg.style.backgroundColor = "#2ecc71";
-            msg.innerText = "Profile updated successfully!";
-        } else {
-            msg.style.backgroundColor = "#e74c3c";
-            msg.innerText = data.error;
-        }
-    } catch (e) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Error updating profile.";
-    }
-}
-
-// ============================================================
-// DASHBOARD & NAVIGATION
-// ============================================================
 
 async function loadDashboard() {
     displayWelcome();
     const user = await refreshUserFromBackend();
-    if (!user) {
-        window.location.href = "index.html";
-        return;
-    }
+    if (!user) { window.location.href = "index.html"; return; }
 
     if (user.is_super_admin) {
-        const superBtn = document.getElementById("superAdminBtnContainer");
-        if (superBtn) superBtn.style.display = "block";
+        const btn = document.getElementById("superAdminBtnContainer");
+        if (btn) btn.style.display = "block";
     }
     if (user.is_organizer) {
-        const orgBtn = document.getElementById("organizerBtnContainer");
-        if (orgBtn) orgBtn.style.display = "block";
+        const btn = document.getElementById("organizerBtnContainer");
+        if (btn) btn.style.display = "block";
     }
 
     const electionsElement = document.getElementById("elections");
-    if (!electionsElement) return;
     electionsElement.innerText = "Decrypting civic ledger...";
-
     try {
         const response = await fetch(`${API_URL}/api/elections`, { method: "GET", credentials: "include" });
         const data = await response.json();
@@ -461,18 +292,42 @@ async function loadDashboard() {
 
             const div = document.createElement("div");
             div.className = "election-card";
-            div.innerHTML = `
+            let html = `
                 <h3>${escapeHtml(election.title)}</h3>
                 <p>${escapeHtml(election.description || "")}</p>
                 <p><strong style="color: ${phaseColor};">Phase: ${escapeHtml(election.status)}</strong></p>
-                <button onclick="viewElection(${election.election_id})">View Election</button>
-                <button onclick="viewResults(${election.election_id})" style="margin-top: 10px;">View Results</button>
-                <button onclick="selfNominate(${election.election_id})" style="margin-top: 10px; background-color: #9b59b6;">Run as Candidate</button>
+                <button onclick="viewElection(${election.election_id})" style="margin-top: 10px;">View Election</button>
+                <button onclick="viewResults(${election.election_id})" style="margin-top: 10px; background-color: #34495e;">View Results</button>
             `;
+            
+            // NEW: If user is Super Admin and Election is COMPLETED, show the Remove button
+            if (user.is_super_admin && election.status === "COMPLETED") {
+                html += `<button onclick="removeElection(${election.election_id})" style="margin-top: 10px; background-color: #e74c3c;">Remove Election</button>`;
+            }
+            
+            div.innerHTML = html;
             electionsElement.appendChild(div);
         });
-    } catch (error) {
-        electionsElement.innerText = "Cannot connect to backend.";
+    } catch (error) { electionsElement.innerText = "Cannot connect to backend."; }
+}
+
+async function removeElection(electionId) {
+    if (!confirm("Are you sure you want to remove this completed election? It will be safely archived and hidden from all users.")) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}`, {
+            method: "DELETE", credentials: "include"
+        });
+        const data = await response.json();
+        
+        if (response.ok) {
+            alert(data.message);
+            loadDashboard(); // Refresh the page so the election disappears
+        } else {
+            alert("Error: " + data.error);
+        }
+    } catch (e) {
+        alert("Cannot connect to backend.");
     }
 }
 
@@ -480,9 +335,8 @@ function viewElection(electionId) { window.location.href = `election.html?id=${e
 function viewResults(electionId) { window.location.href = `results.html?id=${electionId}`; }
 
 // ============================================================
-// ELECTION & VOTING LOGIC
+// DYNAMIC ELECTION VIEW (WITH TICKET DELEGATION)
 // ============================================================
-
 async function loadElection() {
     displayWelcome();
     const user = await refreshUserFromBackend();
@@ -490,70 +344,321 @@ async function loadElection() {
 
     const params = new URLSearchParams(window.location.search);
     const electionId = params.get("id");
-    const title = document.getElementById("electionTitle");
-    const description = document.getElementById("electionDescription");
-    const status = document.getElementById("electionStatus");
     const candidatesElement = document.getElementById("candidates");
 
     try {
         const electionResponse = await fetch(`${API_URL}/api/elections/${electionId}`, { method: "GET", credentials: "include" });
         const electionData = await electionResponse.json();
-        if (!electionResponse.ok) { title.innerText = "Unable to load election."; return; }
+        const electionInfo = electionData.election;
+        
+        if (electionResponse.ok) {
+            document.getElementById("electionTitle").innerText = electionInfo.title || "";
+            document.getElementById("electionDescription").innerText = electionInfo.description || "";
+            document.getElementById("electionStatus").innerText = `Phase: ${electionInfo.status || ""}`;
+        }
 
-        const election = electionData.election;
-        title.innerText = election.title || "";
-        description.innerText = election.description || "";
-        status.innerText = `Phase: ${election.status || ""}`;
+        let html = `<div class="content-divider"></div>`;
 
-        candidatesElement.innerText = "Loading official candidates...";
+        const isSuperAdmin = user.is_super_admin;
+        const isOrganizer = electionInfo.organizer_pid === user.pid;
+        const canParticipate = !isSuperAdmin && !isOrganizer;
+        const isEligible = electionInfo.voter_status === "ELIGIBLE";
+        const isNominationPhase = electionInfo.status === "NOMINATION";
+        const isActivePhase = electionInfo.status === "ACTIVE";
+
+        if (!electionInfo.has_organizer) {
+            if (!isSuperAdmin) {
+                html += `<div class="section-heading compact" style="text-align: center; display: flex; flex-direction: column; align-items: center; padding: 2rem 0;">
+                            <h2 style="margin-bottom: 10px;">Election Administrator Needed</h2>
+                            <p style="color: #5B6478; max-width: 500px;">This election requires a neutral Organizer before parties can register or voters can apply.</p>
+                            <button class="btn btn-gold" onclick="applyToOrganize(${electionId})" style="margin-top: 1rem;">Apply to be Organizer</button>
+                         </div>`;
+            } else {
+                html += `<div class="section-heading compact" style="text-align: center; padding: 2rem 0;">
+                            <h2 style="margin-bottom: 10px;">Awaiting Organizer</h2>
+                            <p style="color: #5B6478;">This election is paused until an Organizer applies and is appointed by you in the Admin Panel.</p>
+                         </div>`;
+            }
+            candidatesElement.innerHTML = html;
+            return;
+        }
+
+        if (canParticipate) {
+            if (!electionInfo.voter_status) {
+                html += `<div class="role-banner" style="background: linear-gradient(110deg, #f39c12, #e67e22); border-color: #f1c40f; margin-bottom: 20px;">
+                            <span>📝</span>
+                            <div>
+                                <h2 style="color: #FFF; margin-bottom: 5px;">Voter Registration Required</h2>
+                                <p style="color: #FFF;">You must be on the official voter roll to participate, join parties, or vote in this election.</p>
+                                <button class="btn btn-neutral" onclick="registerForVoterRoll(${electionId})" style="margin-top: 10px; color: #333;">Apply for Voter Roll</button>
+                            </div>
+                         </div>`;
+            } else if (electionInfo.voter_status === 'PENDING') {
+                html += `<div class="role-banner" style="background: #34495e; border-color: #2c3e50; margin-bottom: 20px;">
+                            <span>⏳</span>
+                            <div>
+                                <h2 style="color: #FFF; margin-bottom: 5px;">Application Pending</h2>
+                                <p style="color: #FFF;">Your request to join the voter roll is currently awaiting Organizer approval.</p>
+                            </div>
+                         </div>`;
+            } else if (electionInfo.voter_status === 'ELIGIBLE') {
+                html += `<div class="role-banner" style="background: linear-gradient(110deg, #2ecc71, #27ae60); border-color: #2ecc71; margin-bottom: 20px;">
+                            <span>✅</span>
+                            <div>
+                                <h2 style="color: #FFF; margin-bottom: 5px;">Voter Roll Approved</h2>
+                                <p style="color: #FFF;">You are officially whitelisted to participate in this election.</p>
+                            </div>
+                         </div>`;
+            }
+        }
+
+        const partyResponse = await fetch(`${API_URL}/api/elections/${electionId}/parties`, { method: "GET", credentials: "include" });
+        const partyData = await partyResponse.json();
+        
+        let amIPartyLeader = false;
+
+        html += `<div class="section-heading compact"><div><p class="card-kicker">Political Organizations</p><h2>Contesting Parties</h2></div>`;
+        if (canParticipate && isEligible && isNominationPhase) {
+            html += `<button class="btn btn-gold" onclick="registerNewParty(${electionId})">+ Form a New Party</button>`;
+        }
+        html += `</div>`;
+        
+        html += `<div class="election-grid" style="margin-bottom: 2rem;">`;
+        if (partyData.parties && partyData.parties.length > 0) {
+            partyData.parties.forEach(p => {
+                if (p.leader_pid === user.pid) amIPartyLeader = true;
+                html += `<div class="election-card">
+                    <h3>${escapeHtml(p.party_name)}</h3>
+                    <p>Leader: <strong>${escapeHtml(p.leader_name)}</strong></p>`;
+                if (canParticipate && isEligible && isNominationPhase) {
+                    html += `<button class="btn btn-neutral" onclick="joinParty(${electionId}, ${p.party_id}, '${escapeHtml(p.party_name)}')">Join Party</button>`;
+                }
+                html += `</div>`;
+            });
+        } else {
+            if (electionInfo.status === "UPCOMING") {
+                html += `<p style="color: #5B6478; grid-column: 1 / -1;">Party registration will open during the Nomination phase.</p>`;
+            } else {
+                html += `<p style="color: #5B6478; grid-column: 1 / -1;">No parties have been approved yet.</p>`;
+            }
+        }
+        html += `</div>`;
+
+        // TICKET DELEGATION CONTROL PANEL (ONLY FOR PARTY LEADERS)
+        if (canParticipate && isEligible && isNominationPhase && amIPartyLeader) {
+            html += `<div class="ticket-delegation-panel">
+                        <div style="margin-bottom: 15px;">
+                            <span style="color: #f39c12; font-weight: bold; font-size: 16px;">👑 Party Leader Controls: Delegate Tickets</span>
+                        </div>
+                        <div class="inline-form" style="gap: 15px; flex-wrap: wrap; align-items: flex-start;">
+                            <div style="flex: 1; min-width: 200px;">
+                                <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 5px;">1. Select Party Member</label>
+                                <select id="delegateMemberSelect" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 4px;">
+                                    <option value="">Loading members...</option>
+                                </select>
+                            </div>
+                            <div style="flex: 1; min-width: 200px;">
+                                <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 5px;">2. Select Ballot Position</label>
+                                <select id="delegatePositionSelect" style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 4px;">
+                                    <option value="">Loading positions...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-top: 15px;">
+                            <label style="font-size: 13px; color: #94a3b8; display: block; margin-bottom: 5px;">3. Campaign Manifesto / Slogan</label>
+                            <input type="text" id="delegateManifesto" placeholder="Enter campaign slogan..." style="width: 100%; padding: 10px; background: #0f172a; border: 1px solid #334155; color: white; border-radius: 4px; margin-bottom: 15px;">
+                            <button class="btn btn-violet" onclick="assignCandidate(${electionId})">Assign Ticket to Member</button>
+                        </div>
+                     </div>`;
+        }
+
         const candidateResponse = await fetch(`${API_URL}/api/elections/${electionId}/candidates`, { method: "GET", credentials: "include" });
         const candidateData = await candidateResponse.json();
-
         const candidates = candidateData.candidates || [];
-        if (candidates.length === 0) { candidatesElement.innerText = "No candidates approved for this election yet."; return; }
+        
+        if (candidates.length === 0) {
+            if (electionInfo.status === "UPCOMING") {
+                html += `<p style="color: #5B6478;">Candidate tickets will be assigned by Party Leaders during the Nomination phase.</p>`;
+            } else {
+                html += `<p style="color: #5B6478;">No candidates approved for this election yet.</p>`;
+            }
+        } else {
+            const grouped = {};
+            candidates.forEach(c => {
+                if(!grouped[c.position]) grouped[c.position] = [];
+                grouped[c.position].push(c);
+            });
 
-        candidatesElement.innerHTML = "";
-        candidates.forEach(function (candidate) {
-            const div = document.createElement("div");
-            div.className = "candidate-card";
-            div.innerHTML = `
-                <h3>${escapeHtml(candidate.name)}</h3>
-                <p><strong>Position:</strong> ${escapeHtml(candidate.position)}</p>
-                <p><strong>Manifesto:</strong> ${escapeHtml(candidate.manifesto || "")}</p>
-                <button class="vote-button" onclick="castVote(${electionId}, ${candidate.candidate_id})">Vote for ${escapeHtml(candidate.name)}</button>
-            `;
-            candidatesElement.appendChild(div);
+            for (const [position, cands] of Object.entries(grouped)) {
+                html += `<div class="content-divider"></div>`;
+                html += `<div class="section-heading compact"><div><p class="card-kicker">Official Ballot</p><h2>${escapeHtml(position)}</h2></div></div>`;
+                html += `<div class="candidate-grid" style="margin-bottom: 2rem;">`;
+                cands.forEach(candidate => {
+                    html += `
+                        <div class="candidate-card">
+                            <h3>${escapeHtml(candidate.name)}</h3>
+                            <p><strong>Manifesto:</strong> ${escapeHtml(candidate.manifesto || "No manifesto provided.")}</p>`;
+                    if (canParticipate && isEligible && isActivePhase) {
+                        html += `<button class="vote-button" onclick="castVote(${electionId}, ${candidate.candidate_id})">Vote for ${escapeHtml(candidate.name)}</button>`;
+                    }
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            }
+        }
+        candidatesElement.style.display = "block";
+        candidatesElement.innerHTML = html;
+
+        // Automatically fetch dropdown data if this user is a leader
+        if (amIPartyLeader) {
+            fetchPartyMembersForDelegation(electionId);
+            fetchPositionsForDelegation(electionId);
+        }
+
+    } catch (error) { candidatesElement.innerText = "Cannot connect to backend."; }
+}
+
+async function registerForVoterRoll(electionId) {
+    if (!confirm("Submit your application to join the official voter roll for this election?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/register-voter`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        alert(response.ok ? data.message : "Error: " + data.error);
+        if(response.ok) loadElection(); 
+    } catch (e) { alert("Connection Error."); }
+}
+
+async function applyToOrganize(electionId) {
+    if (!confirm("Are you sure you want to apply to be the Election Organizer?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/apply-organizer`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        alert(response.ok ? data.message : "Error: " + data.error);
+    } catch (e) { alert("Connection Error."); }
+}
+
+async function registerNewParty(electionId) {
+    const partyName = prompt("Enter the name of your new Political Party to contest in this election:");
+    if (!partyName) return;
+    
+    const manifesto = prompt("Enter your campaign manifesto or slogan for your Presidential run:");
+    if (manifesto === null) return; // Cancels if they hit 'Cancel'
+    
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/register-party`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                party_name: partyName, 
+                manifesto: manifesto || "No manifesto provided." 
+            })
         });
-    } catch (error) {
-        candidatesElement.innerText = "Cannot connect to backend.";
-    }
+        const data = await response.json();
+        alert(response.ok ? data.message : "Error: " + data.error);
+        if(response.ok) loadElection();
+    } catch (e) { alert("Connection Error."); }
+}
+
+async function joinParty(electionId, partyId, partyName) {
+    if (!confirm(`Are you sure you want to pledge allegiance to ${partyName}?`)) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/parties/${partyId}/join`, {
+            method: "POST", credentials: "include"
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : "Error: " + data.error);
+    } catch (e) { alert("Connection Error."); }
+}
+
+async function fetchPartyMembersForDelegation(electionId) {
+    const select = document.getElementById("delegateMemberSelect");
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/my-party-members`, { credentials: "include" });
+        const data = await response.json();
+        if (response.ok && data.members && data.members.length > 0) {
+            select.innerHTML = `<option value="">-- Choose a Member --</option>` + 
+                data.members.map(m => `<option value="${m.pid}">${escapeHtml(m.name)} (${escapeHtml(m.email)})</option>`).join("");
+        } else {
+            select.innerHTML = `<option value="">No approved members in your party yet</option>`;
+        }
+    } catch (e) { select.innerHTML = `<option value="">Error loading members</option>`; }
+}
+
+async function fetchPositionsForDelegation(electionId) {
+    const select = document.getElementById("delegatePositionSelect");
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/positions`, { credentials: "include" });
+        const data = await response.json();
+        if (response.ok && data.positions && data.positions.length > 0) {
+            select.innerHTML = `<option value="">-- Choose a Position --</option>` + 
+                data.positions.map(p => `<option value="${escapeHtml(p.title)}">${escapeHtml(p.title)}</option>`).join("");
+        } else {
+            select.innerHTML = `<option value="">No positions defined by Organizer</option>`;
+        }
+    } catch (e) { select.innerHTML = `<option value="">Error loading positions</option>`; }
+}
+
+async function assignCandidate(electionId) {
+    const memberPid = document.getElementById("delegateMemberSelect").value;
+    const position = document.getElementById("delegatePositionSelect").value;
+    const manifesto = document.getElementById("delegateManifesto").value.trim();
+
+    if (!memberPid) { alert("Please select a party member."); return; }
+    if (!position) { alert("Please select a ballot position."); return; }
+    
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/assign-candidate`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ member_pid: parseInt(memberPid), position: position, manifesto: manifesto || "No manifesto provided." })
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : "Error: " + data.error);
+        if (response.ok) {
+            document.getElementById("delegateManifesto").value = "";
+            loadElection();
+        }
+    } catch (e) { alert("Cannot connect to backend."); }
 }
 
 async function castVote(electionId, candidateId) {
-    const confirmed = confirm("Are you sure you want to securely cast your vote for this candidate?");
-    if (!confirmed) return;
+    if (!confirm("Are you sure you want to securely cast your vote for this candidate?")) return;
+    
+    // Freeze all buttons BEFORE the request so the user doesn't double-click
     const buttons = document.querySelectorAll(".vote-button");
-    buttons.forEach(function (button) { button.disabled = true; });
+    buttons.forEach(btn => {
+        btn.dataset.originalText = btn.innerText; // Save original text
+        btn.disabled = true;
+        btn.innerText = "PROCESSING...";
+    });
 
     try {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/vote`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ candidate_id: candidateId })
         });
         const data = await response.json();
         
         if (response.ok) {
             alert(data.message || "Ballot cryptographically sealed and cast!");
-            buttons.forEach(function (button) { button.innerText = "Vote already cast"; });
+            // Refresh the election page so buttons unfreeze and you can vote for the next position
+            loadElection(); 
             return;
         }
+        
+        // If the backend rejects the vote (e.g., "You already voted for this position")
         alert(data.error || "Unable to cast vote.");
-        buttons.forEach(function (button) { button.disabled = false; });
-    } catch (error) {
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerText = btn.dataset.originalText; // Restore original text
+        });
+        
+    } catch (e) {
         alert("Cannot connect to backend.");
-        buttons.forEach(function (button) { button.disabled = false; });
+        buttons.forEach(btn => {
+            btn.disabled = false;
+            btn.innerText = btn.dataset.originalText;
+        });
     }
 }
 
@@ -564,364 +669,367 @@ async function loadResults() {
     const resultsElement = document.getElementById("results");
     if (!resultsElement) return;
 
-    resultsElement.innerText = "Loading results...";
+    resultsElement.innerText = "Loading official tally...";
     try {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/results`, { method: "GET", credentials: "include" });
         const data = await response.json();
-        if (!response.ok) {
-            resultsElement.innerText = data.error || "Results are not available.";
-            return;
-        }
+        if (!response.ok) { resultsElement.innerText = data.error || "Results are not available."; return; }
 
         const results = data.results || [];
         if (results.length === 0) { resultsElement.innerText = "No results available yet."; return; }
         
         resultsElement.innerHTML = "";
-        results.forEach(function(result) {
-            const div = document.createElement("div");
-            div.className = "candidate-card";
-            div.innerHTML = `
-                <h3>${escapeHtml(result.candidate_name)}</h3>
-                <p><strong>Position:</strong> ${escapeHtml(result.position)}</p>
-                <p><strong>Total Votes:</strong> ${result.total_votes}</p>
-            `;
-            resultsElement.appendChild(div);
+        resultsElement.style.display = "block";
+
+        const grouped = {};
+        results.forEach(r => {
+            if(!grouped[r.position]) grouped[r.position] = [];
+            grouped[r.position].push(r);
         });
-    } catch (error) {
-        resultsElement.innerText = "Cannot connect to backend.";
-    }
-}
 
-// ============================================================
-// SELF NOMINATION & ORG REQUESTS
-// ============================================================
+        for (const [position, candidates] of Object.entries(grouped)) {
+            const winner = candidates[0]; 
+            let html = `<div class="content-divider"></div>`;
+            html += `<div class="section-heading compact"><div><p class="card-kicker">Official Result</p><h2>${escapeHtml(position)}</h2></div></div>`;
 
-async function selfNominate(electionId) {
-    const position = prompt("What position are you running for? (e.g., President)");
-    if (!position) return;
-    const manifesto = prompt("Enter a short manifesto or campaign slogan:");
-    
-    try {
-        const response = await fetch(`${API_URL}/api/elections/${electionId}/self-nominate`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ position: position, manifesto: manifesto || "No manifesto provided." })
-        });
-        const data = await response.json();
-        if (response.ok) { alert(data.message); } 
-        else { alert("Error: " + data.error); }
-    } catch (e) { alert("Cannot connect to backend."); }
-}
+            if (winner.total_votes > 0) {
+                html += `<div class="role-banner" style="background: linear-gradient(110deg, #095F49, #0B1B33); border-color: #43d6a5; margin-bottom: 20px;">
+                    <span>🏆</span>
+                    <div>
+                        <p class="card-kicker" style="color: #43d6a5;">Declared Winner</p>
+                        <h2>${escapeHtml(winner.candidate_name)}</h2>
+                        <p style="color: #FFF; font-weight: bold; font-family: monospace;">Secured with ${winner.total_votes} votes.</p>
+                    </div>
+                </div>`;
+            } else {
+                html += `<p style="color: #5B6478; font-style: italic; margin-bottom: 20px;">No votes were cast for this position.</p>`;
+            }
 
-async function requestNewOrg() {
-    const orgId = document.getElementById("newOrgId").value.trim();
-    const orgName = document.getElementById("newOrgName").value.trim();
-    const orgEmail = document.getElementById("newOrgEmail").value.trim();
-    const msg = document.getElementById("orgMessage");
-
-    msg.style.display = "block";
-    msg.style.backgroundColor = "#f39c12";
-    msg.innerText = "Sealing organization request...";
-
-    if (!orgId || !orgName || !orgEmail) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "All fields are required.";
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/api/organizations/request`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orgid: orgId, org_name: orgName, org_email: orgEmail })
-        });
-        const data = await response.json();
-        
-        if (response.ok) {
-            msg.style.backgroundColor = "#2ecc71";
-            msg.innerText = data.message;
-            document.getElementById("newOrgId").value = "";
-            document.getElementById("newOrgName").value = "";
-            document.getElementById("newOrgEmail").value = "";
-        } else {
-            msg.style.backgroundColor = "#e74c3c";
-            msg.innerText = data.error;
+            html += `<div class="results-grid" style="margin-bottom: 2rem;">`;
+            candidates.forEach(cand => {
+                const isWinnerStyle = (cand.candidate_id === winner.candidate_id && cand.total_votes > 0) 
+                    ? 'border-color: #0B7A5F; box-shadow: 0 4px 12px rgba(11,122,95,0.15);' : '';
+                html += `<div class="candidate-card" style="${isWinnerStyle}">
+                    <h3>${escapeHtml(cand.candidate_name)}</h3>
+                    <p><strong>Total Votes:</strong> ${cand.total_votes}</p>
+                </div>`;
+            });
+            html += `</div>`;
+            resultsElement.innerHTML += html;
         }
-    } catch (e) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Connection error.";
-    }
+    } catch (error) { resultsElement.innerText = "Cannot connect to backend."; }
 }
 
 // ============================================================
-// ADMIN UI ROUTING & ELECTION PHASES
+// ADMIN AND ORGANIZER SCRUTINY PANELS
 // ============================================================
-
 async function loadAdminUI() {
     const user = await refreshUserFromBackend();
-    if (!user) {
-        window.location.href = "index.html";
-        return;
-    }
-    
-    if (!user.is_super_admin && !user.is_organizer) {
-        window.location.href = "dashboard.html";
-        return;
-    }
+    if (!user || (!user.is_super_admin && !user.is_organizer)) { window.location.href = "index.html"; return; }
 
     if (user.is_super_admin) {
         const sAdmin = document.getElementById("superAdminSection");
         if(sAdmin) {
             sAdmin.style.display = "block";
-            loadPendingOrgs();
+            loadPendingOrganizers();
         }
-    }
+    } 
     
     if (user.is_organizer) {
         const orgAdmin = document.getElementById("organizerSection");
         if(orgAdmin) {
             orgAdmin.style.display = "block";
+            loadOrganizerElections(); 
         }
+    }
+}
+
+async function loadOrganizerElections() {
+    const phaseSelect = document.getElementById("phaseElectionId");
+    const posSelect = document.getElementById("positionElectionId");
+    const scrutinySelect = document.getElementById("scrutinyElectionId");
+    const voterSelect = document.getElementById("voterRollElectionId");
+
+    try {
+        const res = await fetch(`${API_URL}/api/admin/my-elections`, { credentials: "include" });
+        const data = await res.json();
+        if (res.ok && data.my_elections) {
+            myElectionsCache = data.my_elections; // Save to cache
+            
+            let optionsHTML = data.my_elections.map(e => `<option value="${e.election_id}">${escapeHtml(e.title)} (ID: ${e.election_id})</option>`).join("");
+            if(optionsHTML === "") optionsHTML = `<option value="">No elections assigned to you yet</option>`;
+
+            if(phaseSelect) {
+                phaseSelect.innerHTML = optionsHTML;
+                syncPhaseDropdown(); // Set to correct phase on load
+                phaseSelect.addEventListener("change", syncPhaseDropdown); // Update if you select a different election
+            }
+            if(posSelect) posSelect.innerHTML = optionsHTML;
+            if(voterSelect) voterSelect.innerHTML = optionsHTML;
+            if(scrutinySelect) {
+                scrutinySelect.innerHTML = optionsHTML;
+                if(data.my_elections.length > 0) fetchPendingCandidates(); 
+            }
+            if(data.my_elections.length > 0) fetchPendingVoters();
+        }
+    } catch (e) {}
+}
+
+// Automatically changes the dropdown to match the real database status
+function syncPhaseDropdown() {
+    const electionId = document.getElementById("phaseElectionId").value;
+    const statusSelect = document.getElementById("phaseSelect");
+    if (!electionId || !statusSelect) return;
+    
+    const selectedElection = myElectionsCache.find(e => e.election_id == electionId);
+    if (selectedElection && selectedElection.status) {
+        statusSelect.value = selectedElection.status; 
     }
 }
 
 async function createElection() {
+    const orgId = document.getElementById("electionOrgId").value.trim();
     const title = document.getElementById("electionTitle").value.trim();
     const description = document.getElementById("electionDescription").value.trim();
-    const orgId = document.getElementById("electionOrgId").value.trim();
     const msg = document.getElementById("adminMessage");
 
-    msg.style.display = "block";
-    msg.style.backgroundColor = "#f39c12"; 
-    msg.innerText = "Creating election...";
-
-    if (!title || !description || !orgId) {
-        msg.style.backgroundColor = "#e74c3c"; 
-        msg.innerText = "Organization ID, title, and description are required.";
-        return;
-    }
+    msg.style.display = "block"; msg.style.backgroundColor = "#f39c12"; msg.innerText = "Creating election...";
+    if (!title || !description || !orgId) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "All fields required."; return; }
 
     try {
         const response = await fetch(`${API_URL}/api/admin/elections`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ orgid: orgId, title: title, description: description })
         });
         const data = await response.json();
-        
         if (response.ok) {
-            msg.style.backgroundColor = "#2ecc71";
-            msg.innerText = data.message;
-            document.getElementById("electionTitle").value = "";
-            document.getElementById("electionDescription").value = "";
-        } else {
-            msg.style.backgroundColor = "#e74c3c";
-            msg.innerText = data.error;
-        }
-    } catch (e) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Connection error.";
-    }
+            msg.style.backgroundColor = "#2ecc71"; msg.innerText = data.message;
+            document.getElementById("electionOrgId").value = ""; document.getElementById("electionTitle").value = ""; document.getElementById("electionDescription").value = "";
+        } else { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; }
+    } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Connection error."; }
+}
+
+async function loadPendingOrganizers() {
+    const container = document.getElementById("pendingOrganizersContainer");
+    if (!container) return;
+    container.innerHTML = "Loading applications...";
+    try {
+        const response = await fetch(`${API_URL}/api/admin/pending-organizers`, { credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) return;
+        
+        if (data.pending_organizers && data.pending_organizers.length > 0) {
+            let html = "";
+            data.pending_organizers.forEach(app => {
+                html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                    <div><strong>${escapeHtml(app.user_name)}</strong> applied to organize<br><small>Election: <strong>${escapeHtml(app.election_title)}</strong></small></div>
+                    <button onclick="approveOrganizer(${app.app_id})" style="background-color: #2ecc71; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Appoint Organizer</button>
+                </div>`;
+            });
+            container.innerHTML = html;
+        } else { container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending Organizer applications.</p>"; }
+    } catch (e) {}
+}
+
+async function approveOrganizer(appId) {
+    if (!confirm(`Appoint this user as the Election Organizer?`)) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/approve-organizer/${appId}`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        alert(response.ok ? data.message : data.error);
+        loadPendingOrganizers(); 
+    } catch (e) { alert("Connection error."); }
 }
 
 async function changeElectionPhase() {
-    const electionId = document.getElementById("phaseElectionId").value.trim();
+    const electionId = document.getElementById("phaseElectionId").value;
     const status = document.getElementById("phaseSelect").value;
-    
-    if (!electionId) { alert("Please enter an Election ID."); return; }
-    
+    if (!electionId) { alert("Please select an Election."); return; }
     try {
         const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/status`, {
-            method: "PUT",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
+            method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: status })
         });
         const data = await response.json();
         alert(response.ok ? data.message : data.error);
-    } catch (e) {
-        alert("Connection error.");
-    }
-}
-
-async function fetchPendingCandidates() {
-    const electionId = document.getElementById("scrutinyElectionId").value.trim();
-    const container = document.getElementById("scrutinyContainer");
-    
-    if (!electionId) { container.innerHTML = "<p style='color: red;'>Please enter an Election ID.</p>"; return; }
-    
-    container.innerHTML = "Loading candidates...";
-    try {
-        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-candidates`, { credentials: "include" });
-        const data = await response.json();
-        
-        if (!response.ok) { container.innerHTML = `<p style="color: red;">${data.error}</p>`; return; }
-        
-        if (data.pending_candidates && data.pending_candidates.length > 0) {
-            let html = "";
-            data.pending_candidates.forEach(cand => {
-                html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <strong>${escapeHtml(cand.name)}</strong> (ID: ${cand.candidate_id})<br>
-                        <small>Position: ${escapeHtml(cand.position)}</small>
-                    </div>
-                    <button onclick="approveSingleCandidate(${cand.candidate_id})" style="background-color: #2ecc71; padding: 5px 15px; width: auto;">Approve</button>
-                </div>`;
-            });
-            container.innerHTML = html;
-        } else {
-            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending candidates for this election.</p>";
+        if (response.ok) {
+            // Update the cache so it stays synced without refreshing the page
+            const elec = myElectionsCache.find(e => e.election_id == electionId);
+            if(elec) elec.status = status;
         }
-    } catch (e) {
-        container.innerHTML = "<p style='color: #e74c3c;'>Error loading candidates.</p>";
-    }
+    } catch (e) { alert("Connection error."); }
 }
 
-async function approveSingleCandidate(candidateId) {
-    if (!confirm(`Approve candidate ${candidateId} and add them to the official ballot?`)) return;
+async function addElectionPosition() {
+    const electionId = document.getElementById("positionElectionId").value;
+    const title = document.getElementById("positionTitle").value.trim();
+    if (!electionId || !title) { alert("Please select an election and enter a position title."); return; }
     
     try {
-        const response = await fetch(`${API_URL}/api/admin/candidates/${candidateId}/approve`, {
-            method: "POST",
-            credentials: "include"
+        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/positions`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: title })
         });
         const data = await response.json();
         alert(response.ok ? data.message : data.error);
-        fetchPendingCandidates(); 
-    } catch (e) {
-        alert("Connection error.");
-    }
+        if (response.ok) document.getElementById("positionTitle").value = "";
+    } catch (e) { alert("Connection error."); }
 }
 
-async function addOrgMember() {
-    const orgId = document.getElementById("memberOrgId").value.trim();
-    const pid = document.getElementById("memberPid").value.trim();
-    const role = document.getElementById("memberRole").value;
-    const msg = document.getElementById("memberMessage");
-
-    msg.style.display = "block";
-    msg.style.backgroundColor = "#34495e";
-    msg.innerText = "Adding member...";
-
-    if (!orgId || !pid) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Organization ID and User PID are required.";
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_URL}/api/admin/members`, {
-            method: "POST",
-            credentials: "include",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ orgid: orgId, member_pid: parseInt(pid), role_name: role })
-        });
-        const data = await response.json();
-        if (response.ok) {
-            msg.style.backgroundColor = "#2ecc71";
-            msg.innerText = data.message;
-            document.getElementById("memberPid").value = "";
-        } else {
-            msg.style.backgroundColor = "#e74c3c";
-            msg.innerText = data.error;
-        }
-    } catch (e) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Connection error.";
-    }
-}
-
-async function loadPendingOrgs() {
-    const container = document.getElementById("pendingOrgsContainer");
-    if (!container) return;
+async function fetchPendingVoters() {
+    const electionId = document.getElementById("voterRollElectionId").value;
+    const container = document.getElementById("voterRollContainer");
+    if (!electionId) return;
     
-    container.innerHTML = "Loading...";
+    container.innerHTML = "Fetching pending voter applications...";
     try {
-        const response = await fetch(`${API_URL}/api/admin/pending-orgs`, { credentials: "include" });
+        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-voters`, { credentials: "include" });
         const data = await response.json();
+        if (!response.ok) return;
         
-        if (data.pending_orgs && data.pending_orgs.length > 0) {
-            let html = "";
-            data.pending_orgs.forEach(org => {
+        let html = "";
+        if (data.pending_voters && data.pending_voters.length > 0) {
+            data.pending_voters.forEach(v => {
                 html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <strong>${escapeHtml(org.org_name)}</strong> (${escapeHtml(org.orgid)})<br>
-                        <small>${escapeHtml(org.org_email)}</small>
+                        <strong>${escapeHtml(v.name)}</strong> (PID: ${v.pid})<br>
+                        <small>${escapeHtml(v.email)}</small>
                     </div>
-                    <button onclick="approveOrg('${org.orgid}')" style="background-color: #2ecc71; padding: 5px 15px; width: auto;">Approve</button>
+                    <button onclick="approveVoter(${electionId}, ${v.pid})" style="background-color: #2ecc71; padding: 5px 15px; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve Voter</button>
                 </div>`;
             });
             container.innerHTML = html;
         } else {
-            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending requests found.</p>";
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending voter requests.</p>";
         }
-    } catch (e) {
-        container.innerHTML = "<p style='color: #e74c3c;'>Error loading requests.</p>";
-    }
+    } catch (e) {}
 }
 
-async function approveOrg(orgid) {
-    if (!confirm(`Are you sure you want to approve and activate ${orgid}?`)) return;
+async function approveVoter(electionId, pid) {
+    if (!confirm(`Whitelist this user to vote in the election?`)) return;
     try {
-        const response = await fetch(`${API_URL}/api/admin/approve-org/${orgid}`, {
-            method: "POST",
-            credentials: "include"
+        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/approve-voter`, {
+            method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pid: parseInt(pid) })
         });
         const data = await response.json();
-        if (response.ok) {
-            alert(data.message);
-            loadPendingOrgs(); 
-        } else {
-            alert(data.error);
-        }
-    } catch (e) {
-        alert("Connection error.");
-    }
+        alert(response.ok ? data.message : data.error);
+        fetchPendingVoters(); 
+    } catch (e) { alert("Connection error."); }
 }
 
-async function loadAuditLogs() {
-    const container = document.getElementById("logsContainer");
+async function fetchPendingCandidates() {
+    const electionId = document.getElementById("scrutinyElectionId").value;
+    const container = document.getElementById("scrutinyContainer");
+    if (!electionId) { container.innerHTML = "<p style='color: red;'>Please select an Election.</p>"; return; }
+    
+    container.innerHTML = "Fetching pending records...";
+    try {
+        const partyRes = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-parties`, { credentials: "include" });
+        const candRes = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-candidates`, { credentials: "include" });
+        const partyData = await partyRes.json();
+        const candData = await candRes.json();
+        
+        let html = "";
+        if (partyData.pending_parties && partyData.pending_parties.length > 0) {
+            html += `<h4 style="margin: 0 0 10px 0; color: #f39c12; font-family: monospace;">PENDING PARTIES</h4>`;
+            partyData.pending_parties.forEach(p => {
+                html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #fffdfaa3;">
+                    <div><strong>${escapeHtml(p.party_name)}</strong><br><small>Leader: ${escapeHtml(p.leader_name)}</small></div>
+                    <button onclick="approveElectionParty(${p.party_id})" style="background-color: #f39c12; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve Party</button>
+                </div>`;
+            });
+        }
+        
+        if (candData.pending_candidates && candData.pending_candidates.length > 0) {
+            html += `<h4 style="margin: 15px 0 10px 0; color: #2ecc71; font-family: monospace;">PENDING TICKETS</h4>`;
+            candData.pending_candidates.forEach(cand => {
+                html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
+                    <div><strong>${escapeHtml(cand.name)}</strong> (Ticket ID: ${cand.candidate_id})<br><small>Nominated for: <strong>${escapeHtml(cand.position)}</strong></small><br><small>Manifesto: <i>${escapeHtml(cand.manifesto)}</i></small></div>
+                    <button onclick="approveSingleCandidate(${cand.candidate_id})" style="background-color: #2ecc71; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Validate Ticket</button>
+                </div>`;
+            });
+        }
+        if (html === "") html = "<p style='color: #7f8c8d; margin: 0;'>No pending parties or tickets.</p>";
+        container.innerHTML = html;
+    } catch (e) {}
+}
+
+async function approveElectionParty(partyId) {
+    if (!confirm(`Approve this Political Party for the election?`)) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/parties/${partyId}/approve`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        alert(response.ok ? data.message : data.error);
+        fetchPendingCandidates(); 
+    } catch (e) { alert("Connection error."); }
+}
+
+async function approveSingleCandidate(candidateId) {
+    if (!confirm(`Approve ticket ${candidateId} for the official ballot?`)) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/candidates/${candidateId}/approve`, { method: "POST", credentials: "include" });
+        const data = await response.json();
+        alert(response.ok ? data.message : data.error);
+        fetchPendingCandidates(); 
+    } catch (e) { alert("Connection error."); }
+}
+
+// LOG VIEWS (WITH DETAILS COLUMN ADDED)
+async function loadAuditLogs(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
     container.innerHTML = "Retrieving immutable audit trail...";
     try {
         const response = await fetch(`${API_URL}/api/admin/audit-logs`, { credentials: "include" });
         const data = await response.json();
-        if (!response.ok) { container.innerHTML = `<p style="color: red;">${data.error}</p>`; return; }
+        if (!response.ok) return;
+        if (!data.audit_logs || data.audit_logs.length === 0) { 
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No audit logs found.</p>"; 
+            return; 
+        }
+
         let html = '<table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">';
-        html += '<tr style="border-bottom: 2px solid #ccc;"><th>ID</th><th>User</th><th>Action</th><th>Time</th></tr>';
+        html += '<tr style="border-bottom: 2px solid #ccc;"><th>ID</th><th>User</th><th>Action</th><th>Details</th><th>Time</th></tr>';
         data.audit_logs.forEach(log => {
             html += `<tr style="border-bottom: 1px solid #ddd;">
                 <td style="padding: 8px;">${log.log_id}</td>
                 <td style="padding: 8px;">${escapeHtml(log.user_name)}</td>
-                <td style="padding: 8px;"><strong>${escapeHtml(log.action_type)}</strong></td>
+                <td style="padding: 8px;"><strong style="color: #6366f1;">${escapeHtml(log.action_type)}</strong></td>
+                <td style="padding: 8px; color: #475569;">${escapeHtml(log.details || "—")}</td>
                 <td style="padding: 8px;">${escapeHtml(log.action_time)}</td>
             </tr>`;
         });
         html += '</table>';
         container.innerHTML = html;
-    } catch (error) { container.innerHTML = "<p style='color: red;'>Failed to fetch logs.</p>"; }
+    } catch (error) {}
 }
 
-async function loadFraudLogs() {
-    const container = document.getElementById("logsContainer");
+async function loadFraudLogs(containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
     container.innerHTML = "Loading fraud logs...";
     try {
         const response = await fetch(`${API_URL}/api/admin/fraud-logs`, { credentials: "include" });
         const data = await response.json();
-        if (!response.ok) { container.innerHTML = `<p style="color: red;">${data.error}</p>`; return; }
+        if (!response.ok) return;
+        if (!data.fraud_logs || data.fraud_logs.length === 0) { 
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No fraud alerts found.</p>"; 
+            return; 
+        }
+
         let html = '<table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">';
-        html += '<tr style="border-bottom: 2px solid #ccc;"><th>ID</th><th>User</th><th>Fraud Type</th><th>Time</th></tr>';
+        html += '<tr style="border-bottom: 2px solid #ccc;"><th>ID</th><th>User</th><th>Fraud Type</th><th>Details</th><th>Time</th></tr>';
         data.fraud_logs.forEach(log => {
-            html += `<tr class="fraud-log-row">
+            html += `<tr class="fraud-log-row" style="border-bottom: 1px solid #ddd;">
                 <td style="padding: 8px;">${log.fraud_id}</td>
                 <td style="padding: 8px;">${escapeHtml(log.user_name)}</td>
-                <td style="padding: 8px;"><strong>${escapeHtml(log.fraud_type)}</strong></td>
+                <td style="padding: 8px;"><strong style="color: #e74c3c;">${escapeHtml(log.fraud_type)}</strong></td>
+                <td style="padding: 8px; color: #475569;">${escapeHtml(log.description || "—")}</td>
                 <td style="padding: 8px;">${escapeHtml(log.detected_at)}</td>
             </tr>`;
         });
         html += '</table>';
         container.innerHTML = html;
-    } catch (error) { container.innerHTML = "<p style='color: red;'>Failed to fetch logs.</p>"; }
+    } catch (error) {}
 }

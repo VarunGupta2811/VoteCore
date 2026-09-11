@@ -1,8 +1,47 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Election — VoteCore</title><link rel="stylesheet" href="style.css"></head>
-<body class="app-page" onload="loadElection()"><main class="container app-shell">
-    <header class="app-header"><a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a><a class="header-link" href="dashboard.html">← Dashboard</a></header>
-    <section class="page-hero compact-hero"><div><p class="eyebrow">Official ballot</p><h1>Choose with confidence.</h1><p>Every ballot is securely sealed and can only be cast once.</p></div><div class="hero-number">02<span>Ballot</span></div></section>
-    <section class="card election-detail-card"><div class="section-heading"><div><p class="card-kicker" id="welcome">Welcome!</p><h2 id="electionTitle">Loading election...</h2></div><p id="electionStatus" class="status-pill"></p></div><p id="electionDescription" class="election-description"></p><div class="content-divider"></div><div class="section-heading compact"><div><p class="card-kicker">Candidate lineup</p><h2>Meet the candidates</h2></div></div><div id="candidates" class="candidate-grid"></div></section>
-    <footer class="page-actions single"><button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to dashboard</button></footer>
-</main><script src="script.js"></script></body></html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Election Dashboard — VoteCore</title>
+    <link rel="stylesheet" href="style.css?v=20260911e">
+</head>
+<body class="app-page election-page" onload="loadElection()">
+
+    <!-- Navigation Bar -->
+    <header class="top-nav">
+        <a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a>
+        <div id="welcome" style="font-size: 0.9rem; color: #94a3b8; font-family: monospace;">Loading Profile...</div>
+    </header>
+
+    <main class="main-container">
+        
+        <!-- Dynamic Election Header injected by JS -->
+        <section class="election-hero">
+            <p class="eyebrow">Official ballot</p>
+            <h1 id="electionTitle">Loading Election...</h1>
+            <p id="electionDescription"></p>
+            <div id="electionStatus">
+                Phase: Decrypting
+            </div>
+        </section>
+
+        <!-- The Main Dashboard UI -->
+        <section class="content-card election-content-card">
+            
+            <!-- 
+              NOTE: The static "Meet the candidates" header has been completely removed.
+              The empty div below acts as a blank canvas. Our JavaScript will dynamically 
+              stack the Voter Banner, the Party Panel, and the Ballot inside it in the perfect order.
+            -->
+            <div id="candidates"></div>
+
+        </section>
+        
+        <a href="dashboard.html" class="btn-back">← Back to dashboard</a>
+
+    </main>
+
+    <script src="script.js?v=FINAL_ELECTION_UI"></script>
+</body>
+</html>

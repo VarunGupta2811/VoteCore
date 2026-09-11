@@ -1266,3 +1266,719 @@ body.auth-page {
     .inline-form { flex-direction: column; }
     .inline-form .btn { width: 100%; }
 }
+
+/* --- Final visual refinement: high-contrast civic control room ------------ */
+/* These rules deliberately sit last so legacy inline markup cannot make text
+   disappear against a light or dark surface. */
+:root {
+    --surface-border: rgba(32, 60, 103, 0.14);
+    --surface-shadow: 0 18px 48px rgba(3, 20, 49, 0.16);
+    --focus-ring: rgba(34, 98, 195, 0.42);
+}
+
+body.app-page,
+body.auth-page {
+    min-height: 100vh;
+    background-color: #071a37;
+    background-image:
+        radial-gradient(circle at 12% 0%, rgba(37, 92, 177, 0.25), transparent 32rem),
+        radial-gradient(circle at 92% 18%, rgba(199, 154, 61, 0.14), transparent 28rem),
+        linear-gradient(135deg, rgba(255,255,255,0.035) 1px, transparent 1px),
+        linear-gradient(45deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: auto, auto, 22px 22px, 22px 22px;
+}
+
+.app-page .app-shell,
+.auth-page .app-shell {
+    isolation: isolate;
+}
+
+.app-page .app-header {
+    position: sticky;
+    top: 0.75rem;
+    z-index: 20;
+    margin-bottom: clamp(1.75rem, 4vw, 3.25rem);
+    padding: 0.8rem 1rem;
+    border: 1px solid rgba(226, 236, 255, 0.19);
+    border-radius: 1rem;
+    background: linear-gradient(110deg, rgba(7, 25, 54, 0.94), rgba(15, 46, 91, 0.9));
+    box-shadow: 0 12px 34px rgba(2, 12, 30, 0.24);
+    backdrop-filter: blur(14px);
+}
+
+.header-actions { flex-wrap: wrap; }
+.header-actions .btn { min-height: 2.55rem; }
+
+.app-page .page-hero {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(1.2rem, 3vw, 2.2rem) 0 clamp(2.2rem, 5vw, 4rem);
+}
+.app-page .page-hero::after {
+    position: absolute;
+    right: 1rem;
+    bottom: 1rem;
+    width: 8rem;
+    height: 8rem;
+    border: 1px solid rgba(199, 154, 61, 0.34);
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 0.75rem rgba(199, 154, 61, 0.07), inset 0 0 0 1.55rem transparent, inset 0 0 0 1.65rem rgba(199, 154, 61, 0.08);
+    content: "";
+    pointer-events: none;
+}
+.app-page .page-hero > * { position: relative; z-index: 1; }
+.app-page .page-hero h1 {
+    max-width: 18ch;
+    color: #f8fbff;
+    letter-spacing: -0.045em;
+    text-shadow: 0 2px 16px rgba(0, 0, 0, 0.22);
+}
+.app-page .page-hero p:not(.eyebrow) { max-width: 62ch; color: #d9e4f6; }
+.app-page .page-hero .eyebrow { color: #f3c96f; }
+
+.hero-status,
+.status-pill {
+    border: 1px solid rgba(96, 220, 178, 0.46);
+    background: linear-gradient(135deg, #0b7a5f, #085d61);
+    color: #ffffff !important;
+    box-shadow: 0 8px 18px rgba(8, 99, 90, 0.23);
+    font-weight: 750;
+}
+
+.app-page .card,
+.auth-page .card {
+    border: 1px solid var(--surface-border);
+    border-radius: 1.25rem;
+    background: linear-gradient(145deg, #ffffff 0%, #f6f8fd 58%, #edf2fa 100%);
+    box-shadow: var(--surface-shadow);
+}
+.app-page .card:hover { border-color: rgba(38, 87, 166, 0.27); }
+.app-page .card > h2,
+.auth-page .card > h2,
+.app-page .card h3,
+.auth-page .card h3 { color: #0b1b33; }
+.app-page .card p,
+.auth-page .card p,
+.app-page .card label,
+.auth-page .card label { color: #394863; }
+.card-kicker { color: #9a6813 !important; font-weight: 800; letter-spacing: 0.11em; }
+
+input,
+select,
+textarea {
+    border-color: #c6d2e4 !important;
+    background: #ffffff !important;
+    color: #14233b !important;
+    box-shadow: inset 0 1px 1px rgba(15, 35, 64, 0.035);
+}
+input::placeholder,
+textarea::placeholder { color: #65748c !important; opacity: 1; }
+input[readonly],
+input:disabled,
+textarea:disabled,
+select:disabled {
+    background: #eaf0f9 !important;
+    color: #35435a !important;
+    opacity: 1;
+}
+select option { background: #ffffff; color: #14233b; }
+
+:where(button, a, input, select, textarea):focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 3px;
+}
+
+.btn {
+    border: 1px solid transparent;
+    box-shadow: 0 5px 12px rgba(9, 32, 70, 0.14);
+    font-weight: 800;
+    letter-spacing: 0.025em;
+}
+.btn-primary { background: linear-gradient(135deg, #326bc9, #1d4e9c) !important; color: #ffffff !important; }
+.btn-danger { background: linear-gradient(135deg, #c9463b, #a32e29) !important; color: #ffffff !important; }
+.btn-gold { background: linear-gradient(135deg, #d7a844, #ad7619) !important; color: #14233b !important; }
+.btn-neutral { background: linear-gradient(135deg, #53637b, #35465f) !important; color: #ffffff !important; }
+.btn:hover { filter: brightness(1.07); transform: translateY(-1px); }
+
+.message:not(:empty) {
+    display: block;
+    margin: 0.85rem 0;
+    padding: 0.8rem 1rem;
+    border-radius: 0.7rem;
+    font-weight: 700;
+    line-height: 1.45;
+}
+.message[style*="e74c3c"],
+.message[style*="c0392b"],
+.message[style*="A6332A"],
+.message[style*="a6332a"] { color: #ffffff !important; }
+.message[style*="27ae60"],
+.message[style*="0B7A5F"],
+.message[style*="0b7a5f"] { color: #ffffff !important; }
+.message[style*="f39c12"],
+.message[style*="C79A3D"],
+.message[style*="c79a3d"] { color: #14233b !important; }
+
+.data-panel,
+#pendingOrgsContainer,
+#pendingOrganizerContainer,
+#electionSecurityLogs,
+#logsContainer {
+    border: 1px solid #cbd7e8 !important;
+    border-radius: 0.8rem;
+    background: #edf3fb !important;
+    color: #14233b !important;
+}
+.data-panel :is(p, li, span, td),
+#pendingOrgsContainer :is(p, li, span, td),
+#pendingOrganizerContainer :is(p, li, span, td),
+#electionSecurityLogs :is(p, li, span, td),
+#logsContainer :is(p, li, span, td) { color: #14233b; }
+.data-panel table,
+#logsContainer table { width: 100%; border-collapse: collapse; color: #14233b; }
+.data-panel th,
+#logsContainer th { background: #d9e5f5; color: #14233b; font-weight: 800; }
+.data-panel td,
+#logsContainer td { border-color: #c8d5e7; color: #14233b; }
+
+/* Profile identity information intentionally uses a dark secure-record card. */
+.app-page section.card:has(#profVoterId) {
+    border-color: rgba(230, 190, 91, 0.48);
+    background: linear-gradient(145deg, #102b55, #0a1c39) !important;
+    color: #f8fbff !important;
+}
+.app-page section.card:has(#profVoterId) :is(h2, h3, p, label) { color: #edf4ff !important; }
+.app-page section.card:has(#profVoterId) h3 { border-color: rgba(233, 242, 255, 0.22) !important; }
+.app-page section.card:has(#profVoterId) div[style*="display: flex"] { border-bottom-color: rgba(233, 242, 255, 0.18) !important; }
+#profVoterId,
+#profAadhaar { color: #f5ca70 !important; }
+#profStatus { color: #53e2ad !important; }
+#profOrgs,
+#profOrgs :is(li, p, span) { color: #f3f7ff !important; }
+
+.role-banner {
+    border-radius: 1rem;
+    box-shadow: 0 14px 30px rgba(3, 17, 42, 0.23);
+}
+.admin-grid .card { min-height: 100%; }
+.organization-list .organization-card,
+.election-card,
+.candidate-card {
+    border-color: #ccd8e9;
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(11, 38, 78, 0.08);
+}
+.organization-list .organization-card :is(h3, p, span),
+.election-card :is(h3, p, span),
+.candidate-card :is(h3, p, span) { color: #172941; }
+
+::selection { background: #2e67bd; color: #ffffff; }
+
+@media (max-width: 767px) {
+    .app-page .app-header { position: relative; top: auto; }
+    .app-page .page-hero::after { width: 5.25rem; height: 5.25rem; right: 0; opacity: 0.7; }
+    .header-actions { width: 100%; }
+    .header-actions .btn { flex: 1 1 auto; }
+}
+
+/* --- Palette direction: midnight ink, warm parchment and copper ---------- */
+/* The app header is deliberately part of the page flow.  It is not a fixed
+   navigation board, allowing the hero area to set the mood for each screen. */
+body.app-page,
+body.auth-page {
+    background-color: #101722;
+    background-image:
+        radial-gradient(circle at 10% -10%, rgba(65, 107, 144, 0.32), transparent 33rem),
+        radial-gradient(circle at 93% 15%, rgba(193, 136, 59, 0.16), transparent 27rem),
+        linear-gradient(140deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+        linear-gradient(40deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px);
+    background-size: auto, auto, 26px 26px, 26px 26px;
+}
+
+.app-page .app-header {
+    position: relative;
+    top: auto;
+    margin-bottom: clamp(1.25rem, 3vw, 2.5rem);
+    padding: 0.2rem 0 1.05rem;
+    border: 0;
+    border-bottom: 1px solid rgba(237, 228, 210, 0.19);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+}
+.app-page .app-header::after {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 4.3rem;
+    height: 2px;
+    background: #d39a4a;
+    content: "";
+}
+.wordmark { color: #f6f0e6; }
+.wordmark span { color: #d9a14e; }
+
+.app-page .page-hero h1 { color: #fbf7ef; }
+.app-page .page-hero p:not(.eyebrow) { color: #d7d3ca; }
+.app-page .page-hero .eyebrow,
+.card-kicker { color: #d7a151 !important; }
+
+.app-page .card,
+.auth-page .card {
+    border-color: rgba(90, 82, 67, 0.18);
+    background: linear-gradient(145deg, #fcfaf6 0%, #f6f1e9 100%);
+    box-shadow: 0 18px 45px rgba(0, 0, 0, 0.19);
+}
+.app-page .card:hover { border-color: rgba(188, 133, 55, 0.48); }
+.app-page .card > h2,
+.auth-page .card > h2,
+.app-page .card h3,
+.auth-page .card h3 { color: #172536; }
+.app-page .card p,
+.auth-page .card p,
+.app-page .card label,
+.auth-page .card label { color: #53606c; }
+
+input,
+select,
+textarea {
+    border-color: #d8d0c3 !important;
+    background: #fffdf9 !important;
+    color: #1a2735 !important;
+}
+input::placeholder,
+textarea::placeholder { color: #78808a !important; }
+input[readonly],
+input:disabled,
+textarea:disabled,
+select:disabled { background: #eee9e1 !important; color: #48545f !important; }
+
+.btn-primary { background: linear-gradient(135deg, #426a96, #294b70) !important; }
+.btn-danger { background: linear-gradient(135deg, #bd5346, #91372f) !important; }
+.btn-gold { background: linear-gradient(135deg, #e1b363, #bd7f2c) !important; color: #1c2834 !important; }
+.btn-neutral { background: linear-gradient(135deg, #576372, #354453) !important; }
+.hero-status,
+.status-pill {
+    border-color: rgba(133, 208, 178, 0.44);
+    background: linear-gradient(135deg, #347465, #205448);
+}
+
+.data-panel,
+#pendingOrgsContainer,
+#pendingOrganizerContainer,
+#electionSecurityLogs,
+#logsContainer {
+    border-color: #d7d0c4 !important;
+    background: #f0ece5 !important;
+    color: #1a2735 !important;
+}
+.data-panel th,
+#logsContainer th { background: #e3dbcf; color: #1a2735; }
+.data-panel td,
+#logsContainer td { border-color: #d8d0c4; color: #1a2735; }
+
+.app-page section.card:has(#profVoterId) {
+    border-color: rgba(222, 171, 83, 0.54);
+    background: linear-gradient(145deg, #223747, #142533) !important;
+}
+
+@media (max-width: 767px) {
+    .app-page .app-header { position: relative; padding-bottom: 0.9rem; }
+}
+
+/* --- Aurora palette: indigo, slate, teal and a soft lilac paper ---------- */
+/* A cooler palette gives VoteCore its own visual identity while keeping the
+   important elections, identity and error states easy to distinguish. */
+body.app-page,
+body.auth-page {
+    background-color: #0f172a;
+    background-image:
+        radial-gradient(circle at 8% -7%, rgba(99, 102, 241, 0.30), transparent 34rem),
+        radial-gradient(circle at 95% 18%, rgba(14, 165, 233, 0.18), transparent 29rem),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px),
+        linear-gradient(45deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
+}
+
+.app-page .app-header { border-bottom-color: rgba(196, 181, 253, 0.25); }
+.app-page .app-header::after { background: #8b5cf6; }
+.wordmark { color: #f8fafc; }
+.wordmark span { color: #a78bfa; }
+.app-page .page-hero .eyebrow,
+.card-kicker { color: #a78bfa !important; }
+.app-page .page-hero p:not(.eyebrow) { color: #d4def0; }
+
+.app-page .card,
+.auth-page .card {
+    border-color: rgba(100, 116, 139, 0.22);
+    background: linear-gradient(145deg, #ffffff 0%, #f8f8ff 54%, #f0f2fb 100%);
+    box-shadow: 0 20px 50px rgba(2, 6, 23, 0.23);
+}
+.app-page .card:hover { border-color: rgba(124, 92, 224, 0.52); }
+.app-page .card > h2,
+.auth-page .card > h2,
+.app-page .card h3,
+.auth-page .card h3 { color: #18233d; }
+.app-page .card p,
+.auth-page .card p,
+.app-page .card label,
+.auth-page .card label { color: #52617b; }
+
+input,
+select,
+textarea {
+    border-color: #cbd4e5 !important;
+    background: #ffffff !important;
+    color: #18233d !important;
+}
+input[readonly],
+input:disabled,
+textarea:disabled,
+select:disabled { background: #edf1f8 !important; color: #44516a !important; }
+
+.btn-primary { background: linear-gradient(135deg, #6d5bd0, #4d3db1) !important; }
+.btn-danger { background: linear-gradient(135deg, #d85a5f, #ad3d48) !important; }
+.btn-gold { background: linear-gradient(135deg, #43c7c5, #168f9d) !important; color: #082b3d !important; }
+.btn-neutral { background: linear-gradient(135deg, #51617d, #334155) !important; }
+.hero-status,
+.status-pill {
+    border-color: rgba(89, 227, 199, 0.5);
+    background: linear-gradient(135deg, #168f85, #0f6b71);
+}
+
+.data-panel,
+#pendingOrgsContainer,
+#pendingOrganizerContainer,
+#electionSecurityLogs,
+#logsContainer {
+    border-color: #ccd6e7 !important;
+    background: #eef3fa !important;
+    color: #18233d !important;
+}
+.data-panel th,
+#logsContainer th { background: #dfe8f6; color: #18233d; }
+.data-panel td,
+#logsContainer td { border-color: #ccd6e7; color: #18233d; }
+
+/* The identity card is a separate secure surface, so its empty affiliation
+   state gets a dark translucent treatment rather than the page's light panel. */
+.app-page section.card:has(#profVoterId) {
+    border-color: rgba(125, 211, 252, 0.42);
+    background: linear-gradient(145deg, #172554 0%, #172b4d 52%, #10213b 100%) !important;
+    box-shadow: 0 22px 48px rgba(2, 10, 30, 0.34);
+}
+.app-page section.card:has(#profVoterId) h3 { color: #c9d8ff !important; }
+#profVoterId,
+#profAadhaar { color: #7dd3fc !important; }
+#profStatus { color: #5eead4 !important; }
+.app-page section.card:has(#profVoterId) #profOrgs {
+    margin-top: 0.8rem !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+.app-page section.card:has(#profVoterId) #profOrgs li,
+.app-page section.card:has(#profVoterId) #profOrgs .organization-state {
+    min-height: 0;
+    padding: 0.78rem 0.9rem;
+    border: 1px solid rgba(186, 230, 253, 0.25) !important;
+    border-radius: 0.7rem;
+    background: rgba(255, 255, 255, 0.11) !important;
+    color: #eef6ff !important;
+    font-weight: 650;
+}
+.app-page section.card:has(#profVoterId) #profOrgs li::marker { color: #5eead4; }
+
+/* --- Election and results: civic festival color treatment ---------------- */
+/* These two public-facing views use brighter, page-specific accents while
+   retaining VoteCore's dark ledger background and high-contrast ballot cards. */
+body.election-page,
+body.results-page {
+    display: block;
+    background-image:
+        radial-gradient(circle at 4% 10%, rgba(139, 92, 246, 0.36), transparent 28rem),
+        radial-gradient(circle at 94% 22%, rgba(45, 212, 191, 0.18), transparent 26rem),
+        radial-gradient(circle at 54% 105%, rgba(244, 114, 182, 0.13), transparent 30rem),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(45deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+}
+
+.election-page .top-nav {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 5.25rem;
+    padding: 1rem clamp(1.25rem, 5vw, 5rem);
+    border-bottom: 1px solid rgba(196, 181, 253, 0.3);
+    background: rgba(10, 18, 43, 0.74);
+    box-shadow: 0 12px 32px rgba(3, 8, 27, 0.18);
+    backdrop-filter: blur(14px);
+}
+.election-page .top-nav::after {
+    position: absolute;
+    bottom: -1px;
+    left: clamp(1.25rem, 5vw, 5rem);
+    width: 5.5rem;
+    height: 2px;
+    background: linear-gradient(90deg, #a78bfa, #2dd4bf);
+    content: "";
+}
+.election-page .wordmark {
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+}
+.election-page .wordmark::before {
+    display: inline-grid;
+    width: 2.1rem;
+    height: 2.1rem;
+    margin-right: 0.5rem;
+    place-items: center;
+    border: 1px solid #d5b35e;
+    border-radius: 50%;
+    color: #f4cf72;
+    content: "V";
+    font-family: var(--font-display);
+    letter-spacing: 0;
+}
+.election-page .wordmark span { color: #bca9ff; }
+.election-page #welcome { color: #c9d7f1 !important; }
+
+.election-page .main-container {
+    width: min(100% - 2rem, 66rem);
+    margin: 0 auto;
+    padding: clamp(2.8rem, 7vw, 5.5rem) 0 4rem;
+}
+.election-hero {
+    position: relative;
+    overflow: hidden;
+    padding: clamp(1.5rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem) clamp(2.5rem, 6vw, 4rem);
+    text-align: center;
+}
+.election-hero::before {
+    position: absolute;
+    z-index: -1;
+    top: -8rem;
+    left: 50%;
+    width: 28rem;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: repeating-conic-gradient(from 5deg, rgba(253, 211, 118, 0.22) 0deg 1.2deg, transparent 1.2deg 10deg);
+    content: "";
+    transform: translateX(-50%);
+    mask-image: radial-gradient(circle, transparent 0 33%, #000 34% 54%, transparent 55%);
+}
+.election-hero .eyebrow {
+    margin: 0 0 0.7rem;
+    color: #c4b5fd;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+.election-hero h1 {
+    max-width: 16ch;
+    margin: 0 auto 0.8rem;
+    padding: 0;
+    color: #fffdfa;
+    font-size: clamp(2.6rem, 7vw, 5rem);
+    letter-spacing: -0.055em;
+    text-shadow: 0 4px 28px rgba(2, 6, 23, 0.5);
+}
+.election-hero h1::before { display: none; }
+.election-hero > p:not(.eyebrow) {
+    max-width: 42rem;
+    margin: 0 auto 1.2rem;
+    color: #dbeafe;
+    font-size: clamp(1rem, 2vw, 1.13rem);
+}
+.election-hero #electionStatus {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.52rem 0.9rem;
+    border: 1px solid rgba(167, 139, 250, 0.64);
+    border-radius: 999px;
+    background: rgba(47, 36, 92, 0.6);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.25);
+    color: #d8ceff;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+.election-hero #electionStatus::before {
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 50%;
+    background: #5eead4;
+    box-shadow: 0 0 0 4px rgba(94, 234, 212, 0.15), 0 0 12px rgba(94, 234, 212, 0.85);
+    content: "";
+}
+
+.election-page .election-content-card,
+.results-page .result-card {
+    overflow: hidden;
+    border: 1px solid rgba(196, 181, 253, 0.4);
+    border-radius: clamp(1.15rem, 3vw, 1.75rem);
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(244, 247, 255, 0.96)),
+        linear-gradient(120deg, #ffffff, #eef5ff);
+    box-shadow: 0 28px 68px rgba(2, 6, 23, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+.election-page .election-content-card {
+    position: relative;
+    padding: clamp(1.25rem, 4vw, 3.25rem);
+}
+.election-page .election-content-card::before,
+.election-page .election-content-card::after {
+    z-index: 1;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-color: #e0ad46;
+    opacity: 0.9;
+}
+.election-page #candidates .content-divider,
+.results-page #results .content-divider {
+    height: 2px;
+    margin: 2.15rem 0;
+    background: linear-gradient(90deg, #8b5cf6, #2dd4bf 46%, rgba(45, 212, 191, 0));
+}
+.election-page #candidates .section-heading h2,
+.results-page #results .section-heading h2 { color: #18233d; }
+.election-page #candidates .candidate-card,
+.results-page #results .candidate-card {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #cdd8f0;
+    border-top: 4px solid #8b5cf6;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #ffffff, #f3f7ff);
+    box-shadow: 0 10px 24px rgba(45, 76, 124, 0.1);
+}
+.election-page #candidates .candidate-card:nth-child(3n + 2),
+.results-page #results .candidate-card:nth-child(3n + 2) { border-top-color: #2cbfae; }
+.election-page #candidates .candidate-card:nth-child(3n),
+.results-page #results .candidate-card:nth-child(3n) { border-top-color: #e8876b; }
+.election-page #candidates .candidate-card:hover,
+.results-page #results .candidate-card:hover {
+    border-color: #8b5cf6;
+    box-shadow: 0 16px 30px rgba(91, 77, 180, 0.18);
+    transform: translateY(-4px);
+}
+.election-page #candidates .election-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 10.5rem;
+    border: 1px solid #d6d9f4;
+    border-top: 4px solid #f0b653;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #ffffff, #faf6ff);
+    box-shadow: 0 10px 24px rgba(77, 62, 151, 0.1);
+}
+.election-page #candidates .election-card::after {
+    position: absolute;
+    top: -3.5rem;
+    right: -2.8rem;
+    width: 8rem;
+    aspect-ratio: 1;
+    border: 1px solid rgba(167, 139, 250, 0.28);
+    border-radius: 50%;
+    content: "";
+}
+.election-page #candidates .election-card:hover {
+    border-color: #a78bfa;
+    box-shadow: 0 16px 30px rgba(91, 77, 180, 0.18);
+    transform: translateY(-4px);
+}
+.election-page #candidates .role-banner,
+.results-page #results .role-banner {
+    border-radius: 1rem;
+    box-shadow: 0 16px 30px rgba(16, 45, 75, 0.22);
+}
+.election-page .ticket-delegation-panel {
+    margin-bottom: 2rem;
+    padding: clamp(1.1rem, 3vw, 1.5rem);
+    border: 1px solid rgba(129, 140, 248, 0.55);
+    border-radius: 1rem;
+    background: linear-gradient(120deg, #28225b, #203f69 56%, #125c66);
+    box-shadow: 0 15px 30px rgba(29, 35, 89, 0.23);
+}
+.election-page .ticket-delegation-panel > div:first-child span { color: #f8d477 !important; }
+.election-page .ticket-delegation-panel label { color: #d8e4ff !important; }
+.election-page .ticket-delegation-panel select,
+.election-page .ticket-delegation-panel input {
+    border-color: rgba(167, 139, 250, 0.45) !important;
+    background: rgba(11, 25, 54, 0.9) !important;
+    color: #ffffff !important;
+}
+.election-page .btn-back {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 1.5rem;
+    padding: 0.8rem 1.1rem;
+    border: 1px solid rgba(196, 181, 253, 0.46);
+    border-radius: 0.7rem;
+    background: rgba(30, 41, 78, 0.7);
+    color: #f8fafc;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: transform var(--transition-base), background var(--transition-base), box-shadow var(--transition-base);
+}
+.election-page .btn-back:hover {
+    background: linear-gradient(135deg, #6655c9, #3c77a8);
+    box-shadow: 0 10px 22px rgba(88, 73, 181, 0.32);
+    transform: translateY(-2px);
+}
+
+.results-page .app-shell { max-width: 72rem; }
+.results-page .page-hero {
+    margin-bottom: 1rem;
+    padding-top: clamp(2rem, 5vw, 4rem);
+}
+.results-page .page-hero::after {
+    width: clamp(7rem, 16vw, 12rem);
+    height: clamp(7rem, 16vw, 12rem);
+    border-color: rgba(45, 212, 191, 0.32);
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.25) 0 35%, transparent 36%);
+}
+.results-page .hero-number {
+    color: transparent;
+    background: linear-gradient(145deg, #f6d365, #c084fc 48%, #2dd4bf);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-stroke: 0;
+    filter: drop-shadow(0 7px 18px rgba(89, 66, 180, 0.25));
+}
+.results-page .result-card .section-heading {
+    align-items: center;
+    padding-bottom: 1.3rem;
+    border-bottom: 1px solid rgba(139, 92, 246, 0.23);
+}
+.results-page .status-pill.success {
+    border: 1px solid rgba(45, 212, 191, 0.45);
+    background: linear-gradient(135deg, #149a91, #167b98);
+    box-shadow: 0 6px 18px rgba(20, 154, 145, 0.28);
+}
+.results-page #results .role-banner { border-color: #4ee3cf !important; }
+.results-page #results .candidate-card[style*="border-color"] {
+    border-color: #19a997 !important;
+    border-top-color: #19a997 !important;
+    background: linear-gradient(145deg, #f2fffb, #e1f8f4);
+}
+
+@media (max-width: 599px) {
+    .election-page .top-nav { padding-right: 1rem; padding-left: 1rem; }
+    .election-page .top-nav::after { left: 1rem; }
+    .election-page .top-nav #welcome { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .election-page .main-container { width: min(100% - 1.25rem, 66rem); }
+    .election-hero { padding-right: 0; padding-left: 0; }
+    .election-hero::before { width: 22rem; }
+    .results-page .result-card .section-heading { align-items: flex-start; }
+}

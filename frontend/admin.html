@@ -1,19 +1,151 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Management — VoteCore</title><link rel="stylesheet" href="style.css"></head>
-<body class="app-page" onload="loadAdminUI()"><main class="container app-shell">
-    <header class="app-header"><a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a><a class="header-link" href="dashboard.html">← Dashboard</a></header>
-    <section class="page-hero compact-hero"><div><p class="eyebrow">Control center</p><h1>Run elections with precision.</h1><p>Manage organizations, ballots and the platform audit trail.</p></div><div class="hero-number">05<span>Admin</span></div></section>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Management — VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="app-page" onload="loadAdminUI()">
+<main class="container app-shell">
+    <header class="app-header">
+        <a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a>
+        <a class="header-link" href="dashboard.html">← Dashboard</a>
+    </header>
+    
+    <section class="page-hero compact-hero">
+        <div>
+            <p class="eyebrow">Control center</p>
+            <h1>Run elections with precision.</h1>
+            <p>Manage organizations, ballots and the platform audit trail.</p>
+        </div>
+        <div class="hero-number">05<span>Admin</span></div>
+    </section>
+    
+    <!-- ========================================== -->
+    <!-- 1. SUPER ADMIN -->
+    <!-- ========================================== -->
     <section id="superAdminSection" style="display: none;" class="admin-section">
-        <div class="role-banner super-role"><span>👑</span><div><p class="card-kicker">Platform authority</p><h2>Global super admin</h2><p>Platform-wide controls and security monitoring.</p></div></div>
-        <div class="admin-grid"><section class="card"><p class="card-kicker">Organization queue</p><h2>Approve pending organizations</h2><div id="pendingOrgsContainer" class="data-panel"><p>Loading pending requests...</p></div><button class="btn btn-primary btn-full" onclick="loadPendingOrgs()">Refresh requests</button></section>
-        <section class="card"><p class="card-kicker">Accountability</p><h2>Security & audit logs</h2><div class="button-row"><button class="btn btn-primary" onclick="loadAuditLogs()">Audit logs</button><button class="btn btn-danger" onclick="loadFraudLogs()">Fraud alerts</button></div><div id="logsContainer" class="data-panel logs-panel"><p>Select a log type.</p></div></section></div>
+        <div class="role-banner super-role">
+            <span>👑</span>
+            <div>
+                <p class="card-kicker">Platform authority</p>
+                <h2>Global super admin</h2>
+                <p>Create elections, appoint Organizers, and monitor security.</p>
+            </div>
+        </div>
+        <div class="admin-grid">
+            <section class="card">
+                <p class="card-kicker">01 / Master setup</p>
+                <h2>Create an election</h2>
+                <label for="electionOrgId">Host Jurisdiction ID</label>
+                <input type="text" id="electionOrgId" placeholder="e.g. EC_INDIA or COUNCIL_2026">
+                <label for="electionTitle">Election title</label>
+                <input type="text" id="electionTitle" placeholder="e.g. General Election 2026">
+                <label for="electionDescription">Description</label>
+                <textarea id="electionDescription" placeholder="Tell voters what this election is for..." rows="3"></textarea>
+                <button class="btn btn-primary" onclick="createElection()">Create election <span>→</span></button>
+                <p id="adminMessage" class="message" style="display:none;"></p>
+            </section>
+            
+            <section class="card">
+                <p class="card-kicker">02 / Appointments</p>
+                <h2>Approve Organizers</h2>
+                <p class="card-intro">Review user applications to manage elections.</p>
+                <div id="pendingOrganizersContainer" class="data-panel"><p>Loading applications...</p></div>
+                <button class="btn btn-primary btn-full" onclick="loadPendingOrganizers()">Refresh applications</button>
+            </section>
+            
+            <section class="card" style="grid-column: 1 / -1;">
+                <p class="card-kicker">03 / Accountability</p>
+                <h2>Global security & audit logs</h2>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="loadAuditLogs('superLogsContainer')">Global Audit Logs</button>
+                    <button class="btn btn-danger" onclick="loadFraudLogs('superLogsContainer')">Global Fraud Alerts</button>
+                </div>
+                <div id="superLogsContainer" class="data-panel logs-panel"><p>Select a log type.</p></div>
+            </section>
+        </div>
     </section>
+
+    <!-- ========================================== -->
+    <!-- 2. ORGANIZER -->
+    <!-- ========================================== -->
     <section id="organizerSection" style="display: none;" class="admin-section">
-        <div class="role-banner organizer-role"><span>⚙️</span><div><p class="card-kicker">Organization workspace</p><h2>Organizer panel</h2><p>Manage elections, candidate scrutiny and organization members.</p></div></div>
-        <div class="admin-grid"><section class="card"><p class="card-kicker">01 / Ballot setup</p><h2>Create an election</h2><label for="electionOrgId">Organization ID</label><input type="text" id="electionOrgId" placeholder="e.g. CS_CLUB_26"><label for="electionTitle">Election title</label><input type="text" id="electionTitle" placeholder="Election title"><label for="electionDescription">Description</label><textarea id="electionDescription" placeholder="Tell voters what this election is for..." rows="3"></textarea><button class="btn btn-primary" onclick="createElection()">Create election <span>→</span></button><p id="adminMessage" class="message" style="display:none;"></p></section>
-        <section class="card"><p class="card-kicker">02 / Election lifecycle</p><h2>Manage election phases</h2><label for="phaseElectionId">Election ID</label><input type="number" id="phaseElectionId" placeholder="e.g. 1"><label for="phaseSelect">Current phase</label><select id="phaseSelect"><option value="UPCOMING">UPCOMING — announced</option><option value="NOMINATION">NOMINATION — candidates</option><option value="ACTIVE">ACTIVE — voting day</option><option value="COMPLETED">COMPLETED — results published</option></select><button class="btn btn-violet" onclick="changeElectionPhase()">Update phase <span>→</span></button></section>
-        <section class="card"><p class="card-kicker">03 / Candidate review</p><h2>Candidate scrutiny</h2><p class="card-intro">Approve nominees before they appear on the official ballot.</p><div class="inline-form"><input type="number" id="scrutinyElectionId" placeholder="Election ID"><button class="btn btn-violet" onclick="fetchPendingCandidates()">Fetch</button></div><div id="scrutinyContainer" class="data-panel"><p>Enter an Election ID to view pending candidates.</p></div></section>
-        <section class="card"><p class="card-kicker">04 / Membership</p><h2>Add organization member</h2><label for="memberOrgId">Organization ID</label><input type="text" id="memberOrgId" placeholder="Organization ID"><label for="memberPid">User PID</label><input type="number" id="memberPid" placeholder="User PID"><label for="memberRole">Role</label><select id="memberRole"><option value="ORGANIZER">Organizer — manages elections</option><option value="VOTER">Voter — standard participant</option></select><button class="btn btn-success" onclick="addOrgMember()">Add member <span>→</span></button><p id="memberMessage" class="message" style="display:none;"></p></section></div>
+        <div class="role-banner organizer-role">
+            <span>⚙️</span>
+            <div>
+                <p class="card-kicker">Election administration</p>
+                <h2>Organizer panel</h2>
+                <p>Manage election phases, party registrations, and ticket scrutiny.</p>
+            </div>
+        </div>
+        <div class="admin-grid">
+            <section class="card">
+                <p class="card-kicker">01 / Lifecycle</p>
+                <h2>Manage election phases</h2>
+                <label for="phaseElectionId">Select Election</label>
+                <select id="phaseElectionId"><option value="">Loading...</option></select>
+                <label for="phaseSelect">Current phase</label>
+                <select id="phaseSelect">
+                    <option value="UPCOMING">UPCOMING — announced</option>
+                    <option value="NOMINATION">NOMINATION — party tickets</option>
+                    <option value="ACTIVE">ACTIVE — voting open</option>
+                    <option value="COMPLETED">COMPLETED — results published</option>
+                </select>
+                <button class="btn btn-violet" onclick="changeElectionPhase()">Update phase <span>→</span></button>
+            </section>
+
+            <!-- NEW: Organizer defines the available positions -->
+            <section class="card">
+                <p class="card-kicker">02 / Setup</p>
+                <h2>Define Ballot Positions</h2>
+                <p class="card-intro">Add official posts (e.g., Vice President) to the election.</p>
+                <label for="positionElectionId">Select Election</label>
+                <select id="positionElectionId"><option value="">Loading...</option></select>
+                <label for="positionTitle">Position Title</label>
+                <input type="text" id="positionTitle" placeholder="e.g. Secretary">
+                <button class="btn btn-violet" onclick="addElectionPosition()">Add Position <span>→</span></button>
+            </section>
+            
+            <section class="card" style="grid-column: 1 / -1;">
+                <p class="card-kicker">03 / Scrutiny</p>
+                <h2>Party & Ticket scrutiny</h2>
+                <p class="card-intro">Approve contesting parties and candidate tickets.</p>
+                <div class="inline-form">
+                    <select id="scrutinyElectionId" style="flex: 1;"><option value="">Loading...</option></select>
+                    <button class="btn btn-violet" onclick="fetchPendingCandidates()">Fetch requests</button>
+                </div>
+                <div id="scrutinyContainer" class="data-panel" style="margin-top: 15px;"><p>Select an election to review pending requests.</p></div>
+            </section>
+            
+            <section class="card" style="grid-column: 1 / -1;">
+                <p class="card-kicker">04 / Whitelist</p>
+                <h2>Voter Roll Applications</h2>
+                <div class="inline-form">
+                    <select id="voterRollElectionId" style="flex: 1;"><option value="">Loading...</option></select>
+                    <button class="btn btn-success" onclick="fetchPendingVoters()">Fetch requests</button>
+                </div>
+                <div id="voterRollContainer" class="data-panel" style="margin-top: 15px;"><p>Select an election to review pending voter applications.</p></div>
+            </section>
+
+            <section class="card" style="grid-column: 1 / -1;">
+                <p class="card-kicker">05 / Accountability</p>
+                <h2>Election security logs</h2>
+                <div class="button-row">
+                    <button class="btn btn-primary" onclick="loadAuditLogs('orgLogsContainer')">My Audit Logs</button>
+                    <button class="btn btn-danger" onclick="loadFraudLogs('orgLogsContainer')">Voter Fraud Alerts</button>
+                </div>
+                <div id="orgLogsContainer" class="data-panel logs-panel"><p>Select a log type.</p></div>
+            </section>
+
+        </div>
     </section>
-    <footer class="page-actions single"><button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to voter dashboard</button></footer>
-</main><script src="script.js"></script></body></html>
+
+    <footer class="page-actions single">
+        <button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to voter dashboard</button>
+    </footer>
+</main>
+<script src="script.js?v=FINAL_DELEGATION"></script>
+</body>
+</html>

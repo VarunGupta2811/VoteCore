@@ -1,12 +1,74 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>My profile — VoteCore</title><link rel="stylesheet" href="style.css"></head>
-<body class="app-page" onload="loadProfile()"><main class="container app-shell">
-    <header class="app-header"><a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a><a class="header-link" href="dashboard.html">← Dashboard</a></header>
-    <section class="page-hero compact-hero"><div><p class="eyebrow">Identity center</p><h1>Your verified profile.</h1><p>Keep the contact details behind your voting identity current.</p></div><div class="hero-number">04<span>Profile</span></div></section>
-    <section class="profile-layout">
-        <section class="card profile-card"><p class="card-kicker">Personal details</p><h2>Stay connected</h2><label for="profMobile">Mobile number</label><input type="text" id="profMobile" placeholder="Mobile number"><label for="profCountry">Country</label><input type="text" id="profCountry" placeholder="Country"><label for="profState">State</label><input type="text" id="profState" placeholder="State"><button class="btn btn-primary btn-full" onclick="updateProfile()">Save changes <span>→</span></button><button class="btn btn-danger btn-full" type="button" onclick="logoutAllDevices()">Log out all devices</button><p id="profMessage" class="message" style="display: none;"></p></section>
-        <aside class="identity-card"><div class="identity-card-top"><span class="identity-mark">V</span><div><p>VoteCore identity</p><strong>Verified voter</strong></div></div><div class="identity-line"><span>Voter ID / EPIC</span><strong id="profVoterId">••••••••</strong></div><div class="identity-line"><span>Government ID</span><strong id="profAadhaar">••••••••••••</strong></div><div class="identity-line"><span>Verification</span><strong id="profStatus">Checking...</strong></div><div class="identity-card-foot">VOTECORE / VERIFIED RECORD</div></aside>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile — VoteCore</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="app-page" onload="loadProfile()">
+<main class="container app-shell">
+    <header class="app-header">
+        <a class="wordmark" href="dashboard.html"><span>VOTE</span>CORE</a>
+        <a class="header-link" href="dashboard.html">← Dashboard</a>
+    </header>
+
+    <section class="page-hero compact-hero">
+        <div>
+            <p class="eyebrow">Personal Details</p>
+            <h1>Your verified profile.</h1>
+            <p>Your voting identity is cryptographically locked and secured.</p>
+        </div>
+        <div class="hero-number">04<span>Profile</span></div>
     </section>
-    <section class="card organizations-card"><div class="section-heading"><div><p class="card-kicker">Community access</p><h2>My organizations</h2></div><span class="section-icon">↗</span></div><ul id="profOrgs" class="organization-list"></ul></section>
-    <footer class="page-actions single"><button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to dashboard</button></footer>
-</main><script src="script.js"></script></body></html>
+
+    <div class="admin-grid">
+        <section class="card">
+            <p class="card-kicker">Personal Details</p>
+            <h2>Stay connected</h2>
+            
+            <label>Full Name</label>
+            <input type="text" id="profName" readonly style="background: #e2e8f0; color: #64748b; cursor: not-allowed; font-weight: bold;" value="Loading...">
+            
+            <label>Email Address</label>
+            <input type="text" id="profEmail" readonly style="background: #e2e8f0; color: #64748b; cursor: not-allowed; font-weight: bold;" value="Loading...">
+
+            <label>Registered Mobile</label>
+            <input type="text" id="profMobile" readonly style="background: #e2e8f0; color: #64748b; cursor: not-allowed; font-weight: bold;" value="Loading...">
+
+            <button class="btn btn-danger btn-full" style="margin-top: 20px;" onclick="logoutAllDevices()">Log out all devices</button>
+        </section>
+        
+        <section class="card">
+            <div class="role-banner">
+                <span>V</span>
+                <div>
+                    <p class="card-kicker">VoteCore Identity</p>
+                    <h2>Verified voter</h2>
+                </div>
+            </div>
+            <div class="profile-list">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding: 15px 0;">
+                    <span>Voter ID / EPIC</span>
+                    <span id="profVoterId" style="color: #f39c12;">Loading...</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #334155; padding: 15px 0;">
+                    <span>Government ID</span>
+                    <span id="profAadhaar" style="color: #f39c12;">Loading...</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; padding: 15px 0;">
+                    <span>Verification</span>
+                    <span id="profStatus" style="color: #2ecc71; font-weight: bold;">Loading...</span>
+                </div>
+            </div>
+
+            <h3 style="margin-top: 30px; font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px;">Political Affiliations</h3>
+            <ul id="profOrgs" style="list-style: none; padding: 0; margin-top: 15px; color: #FFF;">
+                <li>Loading...</li>
+            </ul>
+        </section>
+    </div>
+</main>
+<script src="script.js?v=FINAL_PROFILE"></script>
+</body>
+</html>
