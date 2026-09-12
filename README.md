@@ -29,7 +29,7 @@ VoteCore V2 lets organizations run elections as a managed, multi-tenant service 
 | Layer                  | Technology                                        |
 |-------------------------|----------------------------------------------------|
 | Frontend                | HTML, CSS, Vanilla JavaScript                      |
-| Backend                 | Python **[PYTHON_VERSION]**, Flask                 |
+| Backend                 | Python **[3.14.7]**, Flask                 |
 | Database                | Oracle Database 21c XE                             |
 | DB Driver               | `oracledb`                                         |
 | Authentication          | Flask Sessions, `bcrypt`, OTP email verification   |
@@ -90,7 +90,7 @@ VoteCore/
 
 ### Prerequisites
 
-- Python **[PYTHON_VERSION]**
+- Python **[3.14.7]**
 - Oracle Database 21c XE (or access to an Oracle instance)
 - Oracle Instant Client (required by `oracledb` if running in thick mode)
 - `pip` and `virtualenv`
