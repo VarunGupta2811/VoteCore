@@ -1,79 +1,100 @@
-# 🗳️ VoteCore
+# 🗳️ VoteCore V2
 
 > **Enterprise-Grade Platform-as-a-Service (PaaS) Voting Architecture**
 
-VoteCore is a full-stack, multi-tenant digital voting platform built to run secure, phase-locked elections. It combines a Python/Flask backend with an Oracle Database to deliver strict role-based access control, cryptographic identity verification, and an immutable audit trail — so election integrity isn't just a policy, it's enforced at the database level.
+VoteCore V2 is a full-stack, multi-tenant digital voting platform built to run secure, phase-locked elections. It combines a Python/Flask backend with an Oracle Database to deliver strict role-based access control, cryptographic ballot secrecy, and an immutable audit trail — ensuring election integrity is enforced directly at the database level.
 
 ---
 
-## ✨ Features
+## 📖 Project Overview
 
-- **Multi-Tenant PaaS Model** — Anyone can request a new organization (student council, corporate board, etc.). On Super Admin approval, VoteCore dynamically provisions an isolated environment and promotes the requester to `ORGANIZER`.
-- **Role-Based Access Control (RBAC)**
-  - **Super Admin** — global oversight, organization approval, fraud monitoring.
-  - **Organizer** — election creation, phase management, candidate scrutiny.
-  - **Voter** — secure ballot casting and real-time result tracking.
-- **State-Machine Election Lifecycle** — elections move through strict phases (`UPCOMING → NOMINATION → ACTIVE → COMPLETED`); out-of-phase actions like early ballots or late registrations are rejected at the database level.
-- **Immutable Audit & Fraud Logging** — Oracle PL/SQL triggers watch every transaction and write tamper-proof records of anomalies (double-voting, phase-bypass attempts, unauthorized access) to a dedicated `FRAUD_LOGS` ledger.
-- **"Civic Ledger" UI** — a mobile-first design system using deep ink tones, guilloché seal watermarks, and subtle micro-animations to evoke the weight of a physical government document.
+VoteCore V2 lets organizations run elections as a managed, multi-tenant service rather than a one-off script. A **Super Admin** creates and owns each election, appoints an **Election Organizer** to run its day-to-day logistics, and the platform enforces a strict, one-way lifecycle (`UPCOMING → NOMINATION → ACTIVE → COMPLETED → ARCHIVED`) so no phase can be skipped or reopened once it closes. Ballots are cryptographically decoupled from voter identity, every sensitive transaction is written to an immutable fraud log, and completed elections can be exported as PDF audit reports.
+
+---
+
+## ✨ Core Features
+
+- **Multi-Tenant PaaS Model** — Organizations apply to host an election; on Super Admin approval, VoteCore provisions an isolated environment for that election.
+- **Five-Tier Role-Based Access Control (RBAC)** — see [RBAC Details](#-rbac-details) below for the full breakdown, including the corrected election-creation rule.
+- **State-Machine Election Lifecycle** — elections move through strict, one-way phases (`UPCOMING → NOMINATION → ACTIVE → COMPLETED → ARCHIVED`); out-of-phase actions (early ballots, late registrations) are rejected by the backend.
+- **Cryptographic Ballot Secrecy** — voter identity is permanently decoupled from the ballot record. A `VOTER_POST_STATUS` ledger tracks *that* a whitelisted voter has voted, while the `VOTE` record itself remains fully anonymous.
+- **Immutable Audit & Fraud Logging** — every transaction is monitored, and anomalies (double-voting attempts, unauthorized access, phase-bypass attempts) are permanently written to a tamper-proof `FRAUD_LOGS` ledger.
+- **PDF Audit Reports** — audit and fraud logs can be exported as PDF reports via `ReportLab`.
+- **"Civic Ledger" UI** — a mobile-first design system using deep navy and gold tones, optimized contrast, and dedicated fraud-log readability to evoke the weight of a physical government document.
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer                    | Technology                |
-|---------------------------|----------------------------|
-| Frontend                  | HTML, CSS, JavaScript     |
-| Backend                   | Python, Flask             |
-| Database                  | Oracle Database           |
-| Database interface        | Oracle SQL*Plus           |
-| Python → Oracle           | `oracledb` driver         |
-| Authentication            | Flask Sessions + bcrypt + OTP |
-| API                       | Flask REST API            |
-| API Testing               | Postman                   |
-| Version Control           | Git / GitHub              |
+| Layer                  | Technology                                        |
+|-------------------------|----------------------------------------------------|
+| Frontend                | HTML, CSS, Vanilla JavaScript                      |
+| Backend                 | Python **[PYTHON_VERSION]**, Flask                 |
+| Database                | Oracle Database 21c XE                             |
+| DB Driver               | `oracledb`                                         |
+| Authentication          | Flask Sessions, `bcrypt`, OTP email verification   |
+| Document Generation     | `ReportLab` (PDF audit logs)                       |
 
 ---
 
-## 🔒 Security
+## 🔒 Security Architecture
 
-VoteCore follows a zero-trust approach to authentication and data access:
+VoteCore V2 follows a zero-trust approach to authentication and data access:
 
-1. **Password cryptography** — all passwords are hashed with `bcrypt` before storage.
-2. **Session verification** — protected routes require OTP verification, binding a validated identity to a secure, server-side Flask session.
-3. **Environment isolation** — DB credentials and API keys live in a `.env` file, excluded from version control via `.gitignore`.
+1. **Password & PII Cryptography** — passwords and sensitive government IDs (Aadhaar/Voter ID) are hashed with `bcrypt` before storage.
+2. **Session Verification** — protected routes require email OTP verification, which binds the validated identity to a secure, server-side Flask session with active login throttling.
+3. **CSRF Protection** — cryptographic tokens are issued post-login and automatically attached to all authenticated, state-changing requests.
+4. **Environment Isolation** — DB credentials and SMTP API keys live in a local `.env` file, excluded from version control.
+
+---
+
+## 🧑‍⚖️ RBAC Details
+
+> **Correction from a previous revision:** Election Organizers do **not** create elections. Only the **Super Admin** can create an election; the Organizer's role is limited to managing/organizing an election that already exists.
+
+| Role | Creates Elections? | Responsibilities |
+|------|---------------------|-------------------|
+| **Super Admin** | ✅ Yes | Creates elections, appoints Election Organizers, exercises global oversight, monitors fraud, and archives completed elections. |
+| **Election Organizer** | ❌ No — manages existing elections only | Phase management, ballot position definitions, party/ticket scrutiny, and voter roll approval on an election created by a Super Admin. Bound by a strict neutrality rule: cannot contest or vote. |
+| **Party Leader** | No | Forms a political party, manages its members, and delegates tickets/manifestos to candidates. |
+| **Candidate** | No | An approved participant contesting a specific ballot position. |
+| **Voter** | No | A whitelisted participant who casts a single, anonymous ballot. |
 
 ---
 
 ## 📁 Project Structure
 
-```
+```text
 VoteCore/
-├── backend/                # Flask app, REST API routes, DB access & PL/SQL logic
-│   ├── [APP_ENTRY_FILE]        # e.g. app.py — Flask app entry point
-│   ├── [ROUTES_DIR]            # API route blueprints (auth, elections, admin, etc.)
-│   ├── [MODELS_DIR]            # DB models / query layer
-│   ├── [SQL_SCRIPTS_DIR]       # Schema + PL/SQL trigger definitions
-│   └── requirements.txt        # Python dependencies
-├── frontend/                # Client-facing HTML/CSS/JS
-│   ├── [TEMPLATES_DIR]
-│   └── [STATIC_DIR]
-├── .vscode/                 # Editor configuration
-├── .gitignore
+├── backend/
+│   ├── app.py                  # Main Flask application and REST API routes
+│   ├── db.py                   # Oracle database connection pool management
+│   ├── requirements.txt        # Python dependency tracking
+│   └── .env                    # Environment variables (ignored in Git)
+├── frontend/
+│   ├── index.html              # Landing and authentication UI
+│   ├── dashboard.html          # Voter & Party Leader portal
+│   ├── admin.html              # Super Admin & Organizer portal
+│   ├── election.html           # Dynamic ballot and nomination interface
+│   ├── script.js               # Frontend API consumption and DOM logic
+│   └── style.css                # Civic Ledger design system
+├── database/
+│   └── schema.sql              # Master Oracle schema (tables, constraints, FKs)
+├── start-server.bat            # Windows runtime launcher
 └── README.md
 ```
-> Replace the bracketed paths above with your actual file/folder names — GitHub's directory listing wasn't fully browsable from this end, so these are placeholders for the real structure inside `backend/` and `frontend/`.
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Installation
 
 ### Prerequisites
 
 - Python **[PYTHON_VERSION]**
-- Oracle Database **[ORACLE_VERSION]** (Oracle XE works for local development)
+- Oracle Database 21c XE (or access to an Oracle instance)
 - Oracle Instant Client (required by `oracledb` if running in thick mode)
 - `pip` and `virtualenv`
+- An SMTP account for sending OTP emails
 - Git
 
 ### 1. Clone the repository
@@ -101,20 +122,32 @@ DB_USER=[YOUR_DB_USER]
 DB_PASSWORD=[YOUR_DB_PASSWORD]
 DB_DSN=[YOUR_ORACLE_DSN]
 SECRET_KEY=[FLASK_SECRET_KEY]
+SMTP_HOST=[YOUR_SMTP_HOST]
+SMTP_USER=[YOUR_SMTP_USER]
+SMTP_PASSWORD=[YOUR_SMTP_PASSWORD]
 ```
 
 ### 4. Set up the database
 
-Run the schema and PL/SQL trigger scripts against your Oracle instance:
+Run the master schema against your Oracle instance:
 
 ```bash
-sqlplus [DB_USER]/[DB_PASSWORD]@[DB_DSN] @[SCHEMA_SCRIPT].sql
+sqlplus [DB_USER]/[DB_PASSWORD]@[DB_DSN] @database/schema.sql
 ```
 
 ### 5. Run the app
 
+**Windows** — double-click or run:
+
 ```bash
-python [APP_ENTRY_FILE]
+start-server.bat
+```
+
+**macOS/Linux** — run the Flask app directly:
+
+```bash
+cd backend
+python app.py
 ```
 
 The app will be available at `http://localhost:[PORT]`.
@@ -123,13 +156,11 @@ The app will be available at `http://localhost:[PORT]`.
 
 ## ▶️ Usage
 
-1. Register an account and sign in.
-2. Request a new organization to become an **Organizer** (subject to Super Admin approval).
-3. As an **Organizer**: create an election, add candidates, and move it through its phases.
-4. As a **Voter**: cast your ballot during the `ACTIVE` phase and watch results update in real time.
-5. As a **Super Admin**: approve pending organizations and review the fraud/audit log.
-
-A Postman collection for exercising the REST API is available at **[POSTMAN_COLLECTION_LINK]**.
+1. **Super Admin** signs in, creates a new election, and appoints an Election Organizer to run it.
+2. **Election Organizer** defines ballot positions, manages the election's phases, and approves the voter roll — but cannot create elections, contest, or vote.
+3. **Party Leaders** form parties and delegate tickets/manifestos to **Candidates**, who get scrutinized and approved for specific ballot positions.
+4. **Voters** cast a single anonymous ballot once the election reaches the `ACTIVE` phase, and can follow results as they're tallied.
+5. **Super Admin** monitors the `FRAUD_LOGS` ledger throughout, and archives the election once it's `COMPLETED` — audit and fraud reports can be exported as PDF via `ReportLab`.
 
 ---
 
@@ -143,7 +174,7 @@ Contributions are welcome:
 4. Push to the branch (`git push origin feature/your-feature`)
 5. Open a Pull Request
 
-Please open an issue first for major changes so we can discuss the approach.
+Please open an issue first for major changes so the approach can be discussed before you invest time in it.
 
 ---
 
