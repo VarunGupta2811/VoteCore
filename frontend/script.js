@@ -300,7 +300,7 @@ async function loadDashboard() {
                 <button onclick="viewResults(${election.election_id})" style="margin-top: 10px; background-color: #34495e;">View Results</button>
             `;
             
-            // NEW: If user is Super Admin and Election is COMPLETED, show the Remove button
+            // If user is Super Admin and Election is COMPLETED, show the Remove button
             if (user.is_super_admin && election.status === "COMPLETED") {
                 html += `<button onclick="removeElection(${election.election_id})" style="margin-top: 10px; background-color: #e74c3c;">Remove Election</button>`;
             }
@@ -732,6 +732,7 @@ async function loadAdminUI() {
         if(sAdmin) {
             sAdmin.style.display = "block";
             loadPendingOrganizers();
+            loadSuperAdminElections(); // Populates the new PDF Export dropdown
         }
     } 
     
@@ -741,6 +742,22 @@ async function loadAdminUI() {
             orgAdmin.style.display = "block";
             loadOrganizerElections(); 
         }
+    }
+}
+
+// NEW: Automates fetching elections for the Super Admin PDF dropdown
+async function loadSuperAdminElections() {
+    const select = document.getElementById("exportElectionId");
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections`, { credentials: "include" });
+        const data = await response.json();
+        if (response.ok && data.elections) {
+            const options = data.elections.map(e => `<option value="${e.election_id}">${escapeHtml(e.title)} (Phase: ${e.status})</option>`).join("");
+            select.innerHTML = options || `<option value="">No elections available</option>`;
+        }
+    } catch (e) {
+        select.innerHTML = `<option value="">Error loading elections</option>`;
     }
 }
 
@@ -805,6 +822,7 @@ async function createElection() {
         if (response.ok) {
             msg.style.backgroundColor = "#2ecc71"; msg.innerText = data.message;
             document.getElementById("electionOrgId").value = ""; document.getElementById("electionTitle").value = ""; document.getElementById("electionDescription").value = "";
+            loadSuperAdminElections(); // Refresh dropdown list
         } else { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; }
     } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Connection error."; }
 }
@@ -975,7 +993,6 @@ async function approveSingleCandidate(candidateId) {
     } catch (e) { alert("Connection error."); }
 }
 
-// LOG VIEWS (WITH DETAILS COLUMN ADDED)
 async function loadAuditLogs(containerId) {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -1032,4 +1049,16 @@ async function loadFraudLogs(containerId) {
         html += '</table>';
         container.innerHTML = html;
     } catch (error) {}
+}
+
+// ============================================================
+// PDF EXPORT FUNCTIONALITY
+// ============================================================
+function exportFraudLog() {
+    const electionId = document.getElementById('exportElectionId').value;
+    if (!electionId) {
+        alert("Please select an election from the dropdown.");
+        return;
+    }
+    window.location.href = `${API_URL}/api/admin/elections/${electionId}/export-fraud-log`;
 }

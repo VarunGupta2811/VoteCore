@@ -11,6 +11,13 @@ import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from datetime import datetime
+import io
+from flask import send_file
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import inch
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -335,7 +342,6 @@ def get_elections():
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # UPDATED: Filters out ARCHIVED elections from the public dashboard
         cursor.execute("SELECT ELECTION_ID, TITLE, DESCRIPTION, STATUS FROM ELECTION WHERE STATUS != 'ARCHIVED' ORDER BY ELECTION_ID DESC")
         elections = [{"election_id": r[0], "title": r[1], "description": r[2], "status": r[3]} for r in cursor.fetchall()]
         return jsonify({"elections": elections}), 200
@@ -431,7 +437,6 @@ def get_election_parties(election_id):
 
 @app.route("/api/elections/<int:election_id>/register-party", methods=["POST"])
 def register_election_party(election_id):
-    """Creates party, and AUTO-NOMINATES the founder for President"""
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
     
     data = request_json()
@@ -447,7 +452,6 @@ def register_election_party(election_id):
         if not elec or elec[0] != 'NOMINATION': return jsonify({"error": "Parties can only be formed during the NOMINATION phase."}), 400
         if session.get("is_super_admin") or elec[1] == pid: return jsonify({"error": "Administrators and organizers cannot participate."}), 403
 
-        # Step 1: Create Organization & Party
         orgid = "PTY_" + secrets.token_hex(4).upper()
         cursor.execute("INSERT INTO ORGANIZATION (ORGID, ORG_NAME, IS_ACTIVE) VALUES (:1, :2, 1)", (orgid, party_name))
         
@@ -456,7 +460,6 @@ def register_election_party(election_id):
                        (election_id, orgid, pid, party_id_var))
         party_id = int(party_id_var.getvalue()[0])
 
-        # Step 2: Auto-Nominate Founder as President
         cursor.execute("SELECT POSITION_ID FROM ELECTION_POSITION WHERE ELECTION_ID = :1 AND UPPER(TITLE) = 'PRESIDENT'", (election_id,))
         pos_row = cursor.fetchone()
         if pos_row: 
@@ -469,7 +472,6 @@ def register_election_party(election_id):
                            (election_id, next_order, pos_id_var))
             pos_id = int(pos_id_var.getvalue()[0])
 
-        # Step 3: Insert Candidate with Custom Manifesto
         cursor.execute("INSERT INTO CANDIDATE (ELECTION_ID, PID, POSITION, POSITION_ID, ELECTION_PARTY_ID, MANIFESTO, STATUS) VALUES (:1, :2, 'President', :3, :4, :5, 'PENDING')", 
                        (election_id, pid, pos_id, party_id, manifesto))
 
@@ -506,7 +508,6 @@ def join_election_party(election_id, party_id):
 
 @app.route("/api/elections/<int:election_id>/my-party-members", methods=["GET"])
 def get_my_party_members(election_id):
-    """Fetches all verified members of the current user's party for delegation"""
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
     pid = session.get("pid")
     conn = get_connection(); cursor = conn.cursor()
@@ -531,7 +532,6 @@ def get_my_party_members(election_id):
 
 @app.route("/api/elections/<int:election_id>/positions", methods=["GET"])
 def get_election_positions(election_id):
-    """Fetches all official positions created by the Organizer"""
     conn = get_connection(); cursor = conn.cursor()
     try:
         cursor.execute("SELECT POSITION_ID, TITLE FROM ELECTION_POSITION WHERE ELECTION_ID = :1 AND STATUS = 'OPEN' ORDER BY DISPLAY_ORDER", (election_id,))
@@ -544,7 +544,6 @@ def get_election_positions(election_id):
 
 @app.route("/api/elections/<int:election_id>/assign-candidate", methods=["POST"])
 def assign_candidate(election_id):
-    """EXCLUSIVELY FOR PARTY LEADERS: Assign a party member to a specific ticket"""
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
     data = request_json()
     
@@ -563,18 +562,15 @@ def assign_candidate(election_id):
         election = cursor.fetchone()
         if not election or election[0] != 'NOMINATION': return jsonify({"error": "Tickets can only be assigned during the Nomination phase."}), 400
         
-        # 1. Verify Requestor is an Approved Party Leader
         cursor.execute("SELECT ELECTION_PARTY_ID FROM ELECTION_PARTY WHERE ELECTION_ID = :1 AND LEADER_PID = :2 AND STATUS = 'APPROVED'", (election_id, leader_pid))
         party = cursor.fetchone()
         if not party: return jsonify({"error": "Access Denied. Only an approved Party Leader can delegate tickets."}), 403
         party_id = party[0]
 
-        # 2. Verify Target Member is in that specific party
         cursor.execute("SELECT STATUS FROM ELECTION_PARTY_MEMBER WHERE ELECTION_PARTY_ID = :1 AND PID = :2", (party_id, member_pid))
         member = cursor.fetchone()
         if not member or member[0] != 'APPROVED': return jsonify({"error": "That user is not an approved member of your party."}), 403
 
-        # 3. Verify Position exists (Strict Organizer Rules)
         cursor.execute("SELECT POSITION_ID FROM ELECTION_POSITION WHERE ELECTION_ID = :1 AND UPPER(TITLE) = UPPER(:2)", (election_id, position_name))
         pos_row = cursor.fetchone()
         if not pos_row: return jsonify({"error": "The Organizer has not opened this position for the election yet."}), 400
@@ -617,7 +613,6 @@ def cast_vote(election_id):
     
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # 1. Verify Election status and Organizer neutrality
         cursor.execute("SELECT STATUS, ORGANIZER_PID, TITLE FROM ELECTION WHERE ELECTION_ID = :1", (election_id,))
         elec = cursor.fetchone()
         if not elec or elec[0] != "ACTIVE": 
@@ -626,7 +621,6 @@ def cast_vote(election_id):
             return jsonify({"error": "Administrators and organizers cannot vote."}), 403
         election_title = elec[2]
 
-        # 2. Verify Candidate and fetch Position title
         cursor.execute("""
             SELECT C.POSITION_ID, POS.TITLE 
             FROM CANDIDATE C 
@@ -638,13 +632,11 @@ def cast_vote(election_id):
             return jsonify({"error": "Invalid candidate."}), 400
         pos_id, pos_title = cand_row[0], cand_row[1]
 
-        # 3. Check if voter already cast a ballot for this specific post
         cursor.execute("UPDATE VOTER_POST_STATUS SET STATUS = 'VOTED', VOTED_AT = SYSTIMESTAMP WHERE ELECTION_ID = :1 AND POSITION_ID = :2 AND PID = :3 AND STATUS = 'ELIGIBLE'", (election_id, pos_id, pid))
         
         if cursor.rowcount == 0:
             cursor.execute("SELECT STATUS FROM VOTER_POST_STATUS WHERE ELECTION_ID = :1 AND POSITION_ID = :2 AND PID = :3", (election_id, pos_id, pid))
             if cursor.fetchone():
-                # --- LOG FRAUD ALERT: DUPLICATE VOTE ---
                 cursor.execute("""
                     INSERT INTO FRAUD_LOGS (PID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
                     VALUES (:1, 'DOUBLE_VOTE_ATTEMPT', :2, SYSTIMESTAMP)
@@ -652,11 +644,9 @@ def cast_vote(election_id):
                 conn.commit()
                 return jsonify({"error": "You already voted for this position."}), 409
             
-            # Check if voter is approved on the voter roll
             cursor.execute("SELECT STATUS FROM EVENT_PARTICIPANTS WHERE ELECTION_ID = :1 AND PID = :2", (election_id, pid))
             v_status = cursor.fetchone()
             if not v_status or v_status[0] != 'ELIGIBLE':
-                # --- LOG FRAUD ALERT: UNAUTHORIZED VOTER ---
                 cursor.execute("""
                     INSERT INTO FRAUD_LOGS (PID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
                     VALUES (:1, 'UNAUTHORIZED_BALLOT', :2, SYSTIMESTAMP)
@@ -666,7 +656,6 @@ def cast_vote(election_id):
             
             cursor.execute("INSERT INTO VOTER_POST_STATUS (ELECTION_ID, POSITION_ID, PID, STATUS, VOTED_AT) VALUES (:1, :2, :3, 'VOTED', SYSTIMESTAMP)", (election_id, pos_id, pid))
 
-        # 4. Cast the anonymous vote
         cursor.execute("INSERT INTO VOTE (ELECTION_ID, CANDIDATE_ID, POSITION_ID, VOTED_AT) VALUES (:1, :2, :3, SYSTIMESTAMP)", (election_id, candidate_id, pos_id))
         conn.commit()
         return jsonify({"message": "Vote cryptographically sealed and cast!"}), 200
@@ -702,6 +691,150 @@ def get_results(election_id):
 # ============================================================
 # ADMIN / ORGANIZER ROUTES
 # ============================================================
+@app.route("/api/admin/elections/<int:election_id>/export-fraud-log", methods=["GET"])
+def export_fraud_log(election_id):
+    """SUPER ADMIN ONLY: Generates a comprehensive PDF of both the Audit and Fraud logs for a specific election."""
+    if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
+    
+    conn = get_connection(); cursor = conn.cursor()
+    try:
+        # Fetch Election Details
+        cursor.execute("SELECT TITLE, STATUS FROM ELECTION WHERE ELECTION_ID = :1", (election_id,))
+        elec = cursor.fetchone()
+        if not elec: return jsonify({"error": "Election not found"}), 404
+        
+        # 1. Fetch Fraud Logs
+        cursor.execute("""
+            SELECT DETECTED_AT, FRAUD_TYPE, DESCRIPTION, IP_ADDRESS 
+            FROM FRAUD_LOGS 
+            WHERE ELECTION_ID = :1 
+            ORDER BY DETECTED_AT ASC
+        """, (election_id,))
+        fraud_logs = cursor.fetchall()
+
+        # 2. Fetch System Audit Logs referencing this election
+        search_term_1 = f"%Election {election_id} %"
+        search_term_2 = f"%Election ID {election_id}%"
+        cursor.execute("""
+            SELECT ACTION_TIME, ACTION_TYPE, DETAILS 
+            FROM AUDIT_LOGS 
+            WHERE DETAILS LIKE :1 OR DETAILS LIKE :2
+            ORDER BY ACTION_TIME ASC
+        """, (search_term_1, search_term_2))
+        audit_logs = cursor.fetchall()
+        
+        # --- REPORTLAB PDF GENERATION ---
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        story = []
+        styles = getSampleStyleSheet()
+        
+        NAVY = colors.HexColor("#0B1B33")
+        PAPER = colors.HexColor("#F5F7FB")
+        MUTED = colors.HexColor("#5B6478")
+        
+        title_style = ParagraphStyle(name="Title", parent=styles["Heading1"], textColor=NAVY, spaceAfter=10)
+        subtitle_style = ParagraphStyle(name="SubTitle", parent=styles["Heading2"], textColor=NAVY, spaceAfter=10, spaceBefore=20)
+        body_style = ParagraphStyle(name="Body", parent=styles["BodyText"], fontSize=9)
+        
+        # Document Header
+        story.append(Paragraph(f"VoteCore: Comprehensive Security Ledger", title_style))
+        story.append(Paragraph(f"Election: {elec[0]} (ID: {election_id}) - Status: {elec[1]}", body_style))
+        story.append(Paragraph(f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", body_style))
+        story.append(Spacer(1, 0.25 * inch))
+        
+        # =========================================
+        # SECTION 1: SYSTEM AUDIT TRAIL
+        # =========================================
+        story.append(Paragraph("Part 1: Administrative Audit Trail", subtitle_style))
+        audit_table_data = [[
+            Paragraph("<b>Timestamp</b>", body_style), 
+            Paragraph("<b>Action Taken</b>", body_style), 
+            Paragraph("<b>System Details</b>", body_style)
+        ]]
+        
+        if not audit_logs:
+            audit_table_data.append([
+                Paragraph("N/A", body_style),
+                Paragraph("NO_DATA", body_style),
+                Paragraph("No administrative actions found referencing this specific election.", body_style)
+            ])
+        else:
+            for row in audit_logs:
+                audit_table_data.append([
+                    Paragraph(row[0].strftime("%Y-%m-%d %H:%M:%S") if row[0] else "N/A", body_style),
+                    Paragraph(str(row[1]), body_style),
+                    Paragraph(str(row[2]), body_style)
+                ])
+                
+        audit_table = Table(audit_table_data, colWidths=[1.5*inch, 1.5*inch, 4*inch])
+        audit_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, MUTED),
+            ('BACKGROUND', (0, 1), (-1, -1), PAPER),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, PAPER]),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(audit_table)
+
+        # =========================================
+        # SECTION 2: FRAUD DETECTION LOG
+        # =========================================
+        story.append(Paragraph("Part 2: Active Fraud Alerts", subtitle_style))
+        fraud_table_data = [[
+            Paragraph("<b>Timestamp</b>", body_style), 
+            Paragraph("<b>Alert Type</b>", body_style), 
+            Paragraph("<b>Description</b>", body_style), 
+            Paragraph("<b>IP Address</b>", body_style)
+        ]]
+        
+        if not fraud_logs:
+            fraud_table_data.append([
+                Paragraph("N/A", body_style),
+                Paragraph("NO_ALERTS_TRIGGERED", body_style),
+                Paragraph("No fraudulent activity or security anomalies were recorded for this election.", body_style),
+                Paragraph("N/A", body_style)
+            ])
+        else:
+            for row in fraud_logs:
+                fraud_table_data.append([
+                    Paragraph(row[0].strftime("%Y-%m-%d %H:%M:%S") if row[0] else "N/A", body_style),
+                    Paragraph(str(row[1]), body_style),
+                    Paragraph(str(row[2]), body_style),
+                    Paragraph(str(row[3] or "N/A"), body_style)
+                ])
+            
+        fraud_table = Table(fraud_table_data, colWidths=[1.5*inch, 1.5*inch, 3*inch, 1*inch])
+        fraud_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), NAVY),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('GRID', (0, 0), (-1, -1), 0.5, MUTED),
+            ('BACKGROUND', (0, 1), (-1, -1), PAPER),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, PAPER]),
+            ('PADDING', (0, 0), (-1, -1), 6),
+        ]))
+        story.append(fraud_table)
+        
+        doc.build(story)
+        buffer.seek(0)
+        
+        return send_file(
+            buffer, 
+            as_attachment=True, 
+            download_name=f"VoteCore_SecurityLedger_Elec{election_id}.pdf", 
+            mimetype='application/pdf'
+        )
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close(); conn.close()
+
 @app.route("/api/admin/elections", methods=["POST"])
 def create_election():
     if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
@@ -727,7 +860,6 @@ def create_election():
 
 @app.route("/api/admin/elections/<int:election_id>", methods=["DELETE"])
 def remove_election(election_id):
-    """SUPER ADMIN ONLY: Soft-deletes a completed election from the dashboard"""
     if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
     conn = get_connection(); cursor = conn.cursor()
     try:
@@ -736,10 +868,7 @@ def remove_election(election_id):
         if not row: return jsonify({"error": "Election not found."}), 404
         if row[0] != 'COMPLETED': return jsonify({"error": "Only COMPLETED elections can be removed."}), 400
         
-        # Soft delete: update status to ARCHIVED
         cursor.execute("UPDATE ELECTION SET STATUS = 'ARCHIVED' WHERE ELECTION_ID = :1", (election_id,))
-        
-        # Write to Audit Trail so the action is permanently recorded
         cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'ELECTION_ARCHIVED', :2, SYSTIMESTAMP)", 
                        (session.get("pid"), f"Super Admin archived completed Election ID {election_id}"))
         
@@ -798,7 +927,6 @@ def get_my_elections():
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # UPDATED: Filters out ARCHIVED elections from the Organizer Panel
         cursor.execute("SELECT ELECTION_ID, TITLE, STATUS FROM ELECTION WHERE ORGANIZER_PID = :1 AND STATUS != 'ARCHIVED' ORDER BY ELECTION_ID DESC", (session.get("pid"),))
         elections = [{"election_id": r[0], "title": r[1], "status": r[2]} for r in cursor.fetchall()]
         return jsonify({"my_elections": elections}), 200
@@ -809,17 +937,13 @@ def get_my_elections():
 
 @app.route("/api/admin/elections/<int:election_id>/positions", methods=["POST"])
 def add_election_position(election_id):
-    """ORGANIZER ONLY: Define available ballot positions"""
     if not session.get("is_organizer"): return jsonify({"error": "Unauthorized"}), 403
     title = clean_text(request_json().get("title"), "Position Title", 100).title()
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # Fetch both the Organizer PID and the Election Status
         cursor.execute("SELECT ORGANIZER_PID, STATUS FROM ELECTION WHERE ELECTION_ID = :1", (election_id,))
         elec = cursor.fetchone()
         if not elec or elec[0] != session.get("pid"): return jsonify({"error": "Forbidden."}), 403
-        
-        # NEW SECURITY CHECK: Block position creation if the election has advanced
         if elec[1] != 'UPCOMING':
             return jsonify({"error": f"Positions cannot be altered while the election is in the {elec[1]} phase."}), 400
 
@@ -862,21 +986,16 @@ def approve_voter(election_id):
     pid = request_json().get("pid")
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # 1. Fetch Election Title and Organizer PID
         cursor.execute("SELECT ORGANIZER_PID, TITLE FROM ELECTION WHERE ELECTION_ID = :1", (election_id,))
         elec = cursor.fetchone()
         if not elec or elec[0] != session.get("pid"): return jsonify({"error": "Unauthorized."}), 403
         election_title = elec[1]
 
-        # 2. Fetch Voter Name
         cursor.execute("SELECT FIRST_NAME, LAST_NAME FROM UACCOUNT WHERE PID = :1", (pid,))
         voter_row = cursor.fetchone()
         voter_name = f"{voter_row[0]} {voter_row[1]}".strip() if voter_row else f"PID {pid}"
 
-        # 3. Update Voter Status
         cursor.execute("UPDATE EVENT_PARTICIPANTS SET STATUS = 'ELIGIBLE' WHERE ELECTION_ID = :1 AND PID = :2", (election_id, pid))
-        
-        # 4. Insert Human-Readable Audit Log
         cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'VOTER_APPROVED', :2, SYSTIMESTAMP)", 
                        (session.get("pid"), f"Approved voter {voter_name} for election '{election_title}'"))
 

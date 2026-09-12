@@ -63,7 +63,21 @@
                     <button class="btn btn-primary" onclick="loadAuditLogs('superLogsContainer')">Global Audit Logs</button>
                     <button class="btn btn-danger" onclick="loadFraudLogs('superLogsContainer')">Global Fraud Alerts</button>
                 </div>
-                <div id="superLogsContainer" class="data-panel logs-panel"><p>Select a log type.</p></div>
+                
+                <!-- NEW PDF EXPORT SECTION FOR SUPER ADMIN -->
+                <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #D7DDE8;">
+                    <h3 style="margin-bottom: 10px; font-size: 1rem; color: #0B1B33;">Export Immutable Security Ledger (PDF)</h3>
+                    <div class="inline-form" style="display: flex; gap: 10px; align-items: center;">
+                        <select id="exportElectionId" style="flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 4px;">
+                            <option value="">Loading completed elections...</option>
+                        </select>
+                        <button class="btn btn-primary" onclick="exportFraudLog()" style="background-color: #0B7A5F; border-color: #0B7A5F;">
+                            Download PDF Audit
+                        </button>
+                    </div>
+                </div>
+
+                <div id="superLogsContainer" class="data-panel logs-panel" style="margin-top: 20px;"><p>Select a log type.</p></div>
             </section>
         </div>
     </section>
@@ -96,7 +110,6 @@
                 <button class="btn btn-violet" onclick="changeElectionPhase()">Update phase <span>→</span></button>
             </section>
 
-            <!-- NEW: Organizer defines the available positions -->
             <section class="card">
                 <p class="card-kicker">02 / Setup</p>
                 <h2>Define Ballot Positions</h2>
