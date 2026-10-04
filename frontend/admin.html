@@ -31,40 +31,28 @@
             <div>
                 <p class="card-kicker">Platform authority</p>
                 <h2>Global super admin</h2>
-                <p>Create elections, appoint Organizers, and monitor security.</p>
+                <p>Provision tenant environments and monitor global security.</p>
             </div>
         </div>
         <div class="admin-grid">
-            <section class="card">
-                <p class="card-kicker">01 / Master setup</p>
-                <h2>Create an election</h2>
-                <label for="electionOrgId">Host Jurisdiction ID</label>
-                <input type="text" id="electionOrgId" placeholder="e.g. EC_INDIA or COUNCIL_2026">
-                <label for="electionTitle">Election title</label>
-                <input type="text" id="electionTitle" placeholder="e.g. General Election 2026">
-                <label for="electionDescription">Description</label>
-                <textarea id="electionDescription" placeholder="Tell voters what this election is for..." rows="3"></textarea>
-                <button class="btn btn-primary" onclick="createElection()">Create election <span>→</span></button>
-                <p id="adminMessage" class="message" style="display:none;"></p>
+            <!-- 01: PAAS PROVISIONING -->
+            <section class="card hosting-requests-card">
+                <p class="card-kicker">01 / PaaS Provisioning</p>
+                <h2>Approve Hosting Requests</h2>
+                <p class="card-intro">Review institution applications to host managed elections. Approving automatically provisions their environment.</p>
+                <div id="hostRequestsContainer" class="data-panel"><p>Loading hosting applications...</p></div>
+                <button class="btn btn-primary btn-full" onclick="loadHostRequests()">Refresh applications</button>
             </section>
             
-            <section class="card">
-                <p class="card-kicker">02 / Appointments</p>
-                <h2>Approve Organizers</h2>
-                <p class="card-intro">Review user applications to manage elections.</p>
-                <div id="pendingOrganizersContainer" class="data-panel"><p>Loading applications...</p></div>
-                <button class="btn btn-primary btn-full" onclick="loadPendingOrganizers()">Refresh applications</button>
-            </section>
-            
+            <!-- 02: ACCOUNTABILITY & PDF EXPORTS -->
             <section class="card" style="grid-column: 1 / -1;">
-                <p class="card-kicker">03 / Accountability</p>
+                <p class="card-kicker">02 / Accountability</p>
                 <h2>Global security & audit logs</h2>
                 <div class="button-row">
                     <button class="btn btn-primary" onclick="loadAuditLogs('superLogsContainer')">Global Audit Logs</button>
                     <button class="btn btn-danger" onclick="loadFraudLogs('superLogsContainer')">Global Fraud Alerts</button>
                 </div>
                 
-                <!-- NEW PDF EXPORT SECTION FOR SUPER ADMIN -->
                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #D7DDE8;">
                     <h3 style="margin-bottom: 10px; font-size: 1rem; color: #0B1B33;">Export Immutable Security Ledger (PDF)</h3>
                     <div class="inline-form" style="display: flex; gap: 10px; align-items: center;">
@@ -159,6 +147,6 @@
         <button class="btn btn-secondary" onclick="window.location.href='dashboard.html'">← Back to voter dashboard</button>
     </footer>
 </main>
-<script src="script.js?v=FINAL_DELEGATION"></script>
+<script src="script.js"></script>
 </body>
 </html>

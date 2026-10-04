@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify, session, send_file
 from flask_cors import CORS
 import oracledb
 import bcrypt
@@ -12,7 +12,6 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from datetime import datetime
 import io
-from flask import send_file
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
@@ -39,7 +38,6 @@ MAX_LOGIN_ATTEMPTS = 5
 MAX_OTP_ATTEMPTS = 5
 failed_login_attempts = {}
 
-# Holds user registration data temporarily until OTP is verified
 pending_registrations = {} 
 
 ALLOWED_ELECTION_TRANSITIONS = {
@@ -49,7 +47,6 @@ ALLOWED_ELECTION_TRANSITIONS = {
 }
 
 def get_connection(): return oracledb.connect(user=DB_USER, password=DB_PASSWORD, dsn=DB_DSN)
-
 def request_json(): return request.get_json(silent=True) or {}
 
 def clean_text(value, field, maximum, required=True):
@@ -109,7 +106,6 @@ def send_otp_email(receiver_email, otp_code, user_name):
 # ============================================================
 @app.route("/api/auth/register", methods=["POST"])
 def register():
-    """Step 1: Validate input, generate OTP, and hold data in memory"""
     conn = cursor = None
     try:
         data = request_json()
@@ -147,7 +143,6 @@ def register():
 
 @app.route("/api/auth/register-verify", methods=["POST"])
 def register_verify():
-    """Step 2: Verify OTP and formally write the user to the database with Country & State"""
     conn = cursor = None
     try:
         req_data = request_json()
@@ -314,10 +309,10 @@ def profile_manager():
         row = cursor.fetchone()
         
         cursor.execute("""
-            SELECT O.ORG_NAME, 'PARTY_MEMBER' 
+            SELECT PP.NAME, EPM.MEMBER_ROLE 
             FROM ELECTION_PARTY_MEMBER EPM 
             JOIN ELECTION_PARTY EP ON EPM.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID
-            JOIN ORGANIZATION O ON EP.ORGID = O.ORGID
+            JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID
             WHERE EPM.PID = :1 AND EPM.STATUS = 'APPROVED'
         """, (session.get("pid"),))
         orgs = [{"org_name": r[0], "role": r[1]} for r in cursor.fetchall()]
@@ -335,7 +330,7 @@ def profile_manager():
         cursor.close(); conn.close()
 
 # ============================================================
-# USER ELECTION WORKFLOW
+# USER ELECTION WORKFLOW & PAAS HOSTING
 # ============================================================
 @app.route("/api/elections", methods=["GET"])
 def get_elections():
@@ -374,6 +369,35 @@ def get_election(election_id):
     finally:
         cursor.close(); conn.close()
 
+@app.route("/api/elections/request-hosting", methods=["POST"])
+def request_hosting():
+    if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request_json()
+    org_name = clean_text(data.get("org_name"), "Organization Name", 100).title()
+    title = clean_text(data.get("title"), "Election Title", 160)
+    description = clean_text(data.get("description"), "Description", 2000, required=False)
+    pid = session.get("pid")
+    
+    conn = get_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT COUNT(*) FROM ELECTION_HOST_REQUEST WHERE REQUESTER_PID = :1 AND STATUS = 'PENDING'", (pid,))
+        if cursor.fetchone()[0] > 0:
+            return jsonify({"error": "You already have a pending hosting application."}), 409
+            
+        cursor.execute("""
+            INSERT INTO ELECTION_HOST_REQUEST (REQUESTER_PID, ORG_NAME, ELECTION_TITLE, DESCRIPTION, STATUS)
+            VALUES (:1, :2, :3, :4, 'PENDING')
+        """, (pid, org_name, title, description))
+        
+        conn.commit()
+        return jsonify({"message": f"Hosting request for '{org_name}' submitted successfully!"}), 201
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close(); conn.close()
+
 @app.route("/api/elections/<int:election_id>/register-voter", methods=["POST"])
 def register_voter(election_id):
     if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
@@ -398,34 +422,15 @@ def register_voter(election_id):
     finally:
         cursor.close(); conn.close()
 
-@app.route("/api/elections/<int:election_id>/apply-organizer", methods=["POST"])
-def apply_organizer(election_id):
-    if not session.get("logged_in"): return jsonify({"error": "Unauthorized"}), 401
-    pid = session.get("pid")
-    if session.get("is_super_admin"): 
-        return jsonify({"error": "Platform Administrators cannot act as local Organizers."}), 403
-        
-    conn = get_connection(); cursor = conn.cursor()
-    try:
-        cursor.execute("INSERT INTO ORGANIZER_APPLICATION (ELECTION_ID, PID, STATUS) VALUES (:1, :2, 'PENDING')", (election_id, pid))
-        conn.commit()
-        return jsonify({"message": "Application submitted! Pending Super Admin approval."}), 201
-    except oracledb.IntegrityError:
-        if conn: conn.rollback()
-        return jsonify({"error": "You have already applied for this election."}), 409
-    except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
-
 @app.route("/api/elections/<int:election_id>/parties", methods=["GET"])
 def get_election_parties(election_id):
     conn = get_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT EP.ELECTION_PARTY_ID, O.ORG_NAME, U.FIRST_NAME || ' ' || U.LAST_NAME, EP.LEADER_PID
-            FROM ELECTION_PARTY EP JOIN ORGANIZATION O ON EP.ORGID = O.ORGID JOIN UACCOUNT U ON EP.LEADER_PID = U.PID
+            SELECT EP.ELECTION_PARTY_ID, PP.NAME, U.FIRST_NAME || ' ' || U.LAST_NAME, EP.CAMPAIGN_LEADER_PID
+            FROM ELECTION_PARTY EP 
+            JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID 
+            JOIN UACCOUNT U ON EP.CAMPAIGN_LEADER_PID = U.PID
             WHERE EP.ELECTION_ID = :1 AND EP.STATUS = 'APPROVED'
         """, (election_id,))
         parties = [{"party_id": r[0], "party_name": r[1], "leader_name": r[2], "leader_pid": r[3]} for r in cursor.fetchall()]
@@ -452,13 +457,21 @@ def register_election_party(election_id):
         if not elec or elec[0] != 'NOMINATION': return jsonify({"error": "Parties can only be formed during the NOMINATION phase."}), 400
         if session.get("is_super_admin") or elec[1] == pid: return jsonify({"error": "Administrators and organizers cannot participate."}), 403
 
-        orgid = "PTY_" + secrets.token_hex(4).upper()
-        cursor.execute("INSERT INTO ORGANIZATION (ORGID, ORG_NAME, IS_ACTIVE) VALUES (:1, :2, 1)", (orgid, party_name))
+        party_id = "PTY_" + secrets.token_hex(4).upper()
+        try:
+            cursor.execute("INSERT INTO POLITICAL_PARTY (PARTY_ID, NAME, FOUNDER_PID, IS_ACTIVE) VALUES (:1, :2, :3, 1)", (party_id, party_name, pid))
+        except oracledb.IntegrityError:
+            cursor.execute("SELECT PARTY_ID FROM POLITICAL_PARTY WHERE UPPER(NAME) = UPPER(:1)", (party_name,))
+            existing_party = cursor.fetchone()
+            if existing_party:
+                party_id = existing_party[0]
+            else:
+                raise
         
         party_id_var = cursor.var(oracledb.NUMBER)
-        cursor.execute("INSERT INTO ELECTION_PARTY (ELECTION_ID, ORGID, LEADER_PID, STATUS) VALUES (:1, :2, :3, 'PENDING') RETURNING ELECTION_PARTY_ID INTO :4", 
-                       (election_id, orgid, pid, party_id_var))
-        party_id = int(party_id_var.getvalue()[0])
+        cursor.execute("INSERT INTO ELECTION_PARTY (ELECTION_ID, PARTY_ID, CAMPAIGN_LEADER_PID, STATUS) VALUES (:1, :2, :3, 'PENDING') RETURNING ELECTION_PARTY_ID INTO :4", 
+                       (election_id, party_id, pid, party_id_var))
+        ep_id = int(party_id_var.getvalue()[0])
 
         cursor.execute("SELECT POSITION_ID FROM ELECTION_POSITION WHERE ELECTION_ID = :1 AND UPPER(TITLE) = 'PRESIDENT'", (election_id,))
         pos_row = cursor.fetchone()
@@ -473,7 +486,7 @@ def register_election_party(election_id):
             pos_id = int(pos_id_var.getvalue()[0])
 
         cursor.execute("INSERT INTO CANDIDATE (ELECTION_ID, PID, POSITION, POSITION_ID, ELECTION_PARTY_ID, MANIFESTO, STATUS) VALUES (:1, :2, 'President', :3, :4, :5, 'PENDING')", 
-                       (election_id, pid, pos_id, party_id, manifesto))
+                       (election_id, pid, pos_id, ep_id, manifesto))
 
         conn.commit()
         return jsonify({"message": f"'{party_name}' submitted! You have been auto-nominated for President. Pending Organizer approval."}), 201
@@ -512,7 +525,7 @@ def get_my_party_members(election_id):
     pid = session.get("pid")
     conn = get_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("SELECT ELECTION_PARTY_ID FROM ELECTION_PARTY WHERE ELECTION_ID = :1 AND LEADER_PID = :2 AND STATUS = 'APPROVED'", (election_id, pid))
+        cursor.execute("SELECT ELECTION_PARTY_ID FROM ELECTION_PARTY WHERE ELECTION_ID = :1 AND CAMPAIGN_LEADER_PID = :2 AND STATUS = 'APPROVED'", (election_id, pid))
         party = cursor.fetchone()
         if not party: return jsonify({"error": "You are not an approved party leader."}), 403
         party_id = party[0]
@@ -562,7 +575,7 @@ def assign_candidate(election_id):
         election = cursor.fetchone()
         if not election or election[0] != 'NOMINATION': return jsonify({"error": "Tickets can only be assigned during the Nomination phase."}), 400
         
-        cursor.execute("SELECT ELECTION_PARTY_ID FROM ELECTION_PARTY WHERE ELECTION_ID = :1 AND LEADER_PID = :2 AND STATUS = 'APPROVED'", (election_id, leader_pid))
+        cursor.execute("SELECT ELECTION_PARTY_ID FROM ELECTION_PARTY WHERE ELECTION_ID = :1 AND CAMPAIGN_LEADER_PID = :2 AND STATUS = 'APPROVED'", (election_id, leader_pid))
         party = cursor.fetchone()
         if not party: return jsonify({"error": "Access Denied. Only an approved Party Leader can delegate tickets."}), 403
         party_id = party[0]
@@ -593,9 +606,12 @@ def get_candidates(election_id):
     conn = get_connection(); cursor = conn.cursor()
     try:
         cursor.execute("""
-            SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE, C.MANIFESTO, O.ORG_NAME
-            FROM CANDIDATE C JOIN UACCOUNT U ON C.PID = U.PID JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
-            JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID JOIN ORGANIZATION O ON EP.ORGID = O.ORGID
+            SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE, C.MANIFESTO, NVL(PP.NAME, 'Independent')
+            FROM CANDIDATE C 
+            JOIN UACCOUNT U ON C.PID = U.PID 
+            JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
+            LEFT JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID 
+            LEFT JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID
             WHERE C.ELECTION_ID = :1 AND C.STATUS = 'ACTIVE' ORDER BY POS.DISPLAY_ORDER, C.CANDIDATE_ID
         """, (election_id,))
         candidates = [{"candidate_id": r[0], "name": f"{r[1]} ({r[4]})", "position": r[2], "manifesto": r[3]} for r in cursor.fetchall()]
@@ -637,20 +653,22 @@ def cast_vote(election_id):
         if cursor.rowcount == 0:
             cursor.execute("SELECT STATUS FROM VOTER_POST_STATUS WHERE ELECTION_ID = :1 AND POSITION_ID = :2 AND PID = :3", (election_id, pos_id, pid))
             if cursor.fetchone():
+                # FIX: Explicitly logging ELECTION_ID so the PDF export function can find it natively
                 cursor.execute("""
-                    INSERT INTO FRAUD_LOGS (PID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
-                    VALUES (:1, 'DOUBLE_VOTE_ATTEMPT', :2, SYSTIMESTAMP)
-                """, (pid, f"Attempted duplicate vote for '{pos_title}' in election '{election_title}'"))
+                    INSERT INTO FRAUD_LOGS (PID, ELECTION_ID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
+                    VALUES (:1, :2, 'DOUBLE_VOTE_ATTEMPT', :3, SYSTIMESTAMP)
+                """, (pid, election_id, f"Attempted duplicate vote for '{pos_title}' in election '{election_title}'"))
                 conn.commit()
                 return jsonify({"error": "You already voted for this position."}), 409
             
             cursor.execute("SELECT STATUS FROM EVENT_PARTICIPANTS WHERE ELECTION_ID = :1 AND PID = :2", (election_id, pid))
             v_status = cursor.fetchone()
             if not v_status or v_status[0] != 'ELIGIBLE':
+                # FIX: Explicitly logging ELECTION_ID here as well
                 cursor.execute("""
-                    INSERT INTO FRAUD_LOGS (PID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
-                    VALUES (:1, 'UNAUTHORIZED_BALLOT', :2, SYSTIMESTAMP)
-                """, (pid, f"Unapproved voter attempted to cast ballot in election '{election_title}'"))
+                    INSERT INTO FRAUD_LOGS (PID, ELECTION_ID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
+                    VALUES (:1, :2, 'UNAUTHORIZED_BALLOT', :3, SYSTIMESTAMP)
+                """, (pid, election_id, f"Unapproved voter attempted to cast ballot in election '{election_title}'"))
                 conn.commit()
                 return jsonify({"error": "You are not on the approved voter roll."}), 403
             
@@ -676,9 +694,12 @@ def get_results(election_id):
         
         cursor.execute("""
             SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE,
-                   (SELECT COUNT(*) FROM VOTE V WHERE V.CANDIDATE_ID = C.CANDIDATE_ID) AS VOTE_COUNT, O.ORG_NAME
-            FROM CANDIDATE C JOIN UACCOUNT U ON C.PID = U.PID JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
-            JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID JOIN ORGANIZATION O ON EP.ORGID = O.ORGID
+                   (SELECT COUNT(*) FROM VOTE V WHERE V.CANDIDATE_ID = C.CANDIDATE_ID) AS VOTE_COUNT, NVL(PP.NAME, 'Independent')
+            FROM CANDIDATE C 
+            JOIN UACCOUNT U ON C.PID = U.PID 
+            JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
+            LEFT JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID 
+            LEFT JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID
             WHERE C.ELECTION_ID = :1 AND C.STATUS = 'ACTIVE' ORDER BY POS.DISPLAY_ORDER, VOTE_COUNT DESC
         """, (election_id,))
         results = [{"candidate_name": f"{r[1]} ({r[4]})", "position": r[2], "total_votes": int(r[3])} for r in cursor.fetchall()]
@@ -689,41 +710,97 @@ def get_results(election_id):
         cursor.close(); conn.close()
 
 # ============================================================
-# ADMIN / ORGANIZER ROUTES
+# ADMIN / PAAS PROVISIONING ROUTES
 # ============================================================
-@app.route("/api/admin/elections/<int:election_id>/export-fraud-log", methods=["GET"])
-def export_fraud_log(election_id):
-    """SUPER ADMIN ONLY: Generates a comprehensive PDF of both the Audit and Fraud logs for a specific election."""
+@app.route("/api/admin/host-requests", methods=["GET"])
+def get_host_requests():
     if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
     
     conn = get_connection(); cursor = conn.cursor()
     try:
-        # Fetch Election Details
+        cursor.execute("""
+            SELECT R.REQUEST_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, R.ORG_NAME, R.ELECTION_TITLE, R.DESCRIPTION, R.REQUESTER_PID
+            FROM ELECTION_HOST_REQUEST R
+            JOIN UACCOUNT U ON R.REQUESTER_PID = U.PID
+            WHERE R.STATUS = 'PENDING'
+            ORDER BY R.SUBMITTED_AT ASC
+        """)
+        requests = [{"request_id": r[0], "user_name": r[1], "org_name": r[2], "title": r[3], "description": r[4], "pid": r[5]} for r in cursor.fetchall()]
+        return jsonify({"host_requests": requests}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close(); conn.close()
+
+@app.route("/api/admin/host-requests/<int:req_id>/approve", methods=["POST"])
+def approve_host_request(req_id):
+    if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
+    
+    conn = get_connection(); cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT REQUESTER_PID, ORG_NAME, ELECTION_TITLE, DESCRIPTION FROM ELECTION_HOST_REQUEST WHERE REQUEST_ID = :1 AND STATUS = 'PENDING'", (req_id,))
+        req_data = cursor.fetchone()
+        if not req_data: return jsonify({"error": "Request not found or already processed."}), 404
+        
+        requester_pid, org_name, title, description = req_data
+        jurisdiction_id = "HOST_" + secrets.token_hex(4).upper()
+        
+        cursor.execute("INSERT INTO HOST_JURISDICTION (JURISDICTION_ID, NAME, IS_ACTIVE) VALUES (:1, :2, 1)", (jurisdiction_id, org_name))
+        
+        cursor.execute("""
+            INSERT INTO ELECTION (JURISDICTION_ID, TITLE, DESCRIPTION, START_DATE, END_DATE, STATUS, ORGANIZER_PID, ORGANIZER_APPOINTED_AT, ORGANIZER_APPOINTED_BY) 
+            VALUES (:1, :2, :3, SYSTIMESTAMP, SYSTIMESTAMP + INTERVAL '7' DAY, 'UPCOMING', :4, SYSTIMESTAMP, :5)
+        """, (jurisdiction_id, title, description, requester_pid, session.get("pid")))
+        
+        cursor.execute("UPDATE ELECTION_HOST_REQUEST SET STATUS = 'APPROVED' WHERE REQUEST_ID = :1", (req_id,))
+        
+        cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'PAAS_PROVISIONED', :2, SYSTIMESTAMP)", 
+                       (session.get("pid"), f"Provisioned environment for '{org_name}' - Election: '{title}'"))
+        
+        conn.commit()
+        return jsonify({"message": f"Environment for '{org_name}' successfully provisioned!"}), 200
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        cursor.close(); conn.close()
+
+@app.route("/api/admin/elections/<int:election_id>/export-fraud-log", methods=["GET"])
+def export_fraud_log(election_id):
+    if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
+    
+    conn = get_connection(); cursor = conn.cursor()
+    try:
         cursor.execute("SELECT TITLE, STATUS FROM ELECTION WHERE ELECTION_ID = :1", (election_id,))
         elec = cursor.fetchone()
         if not elec: return jsonify({"error": "Election not found"}), 404
         
-        # 1. Fetch Fraud Logs
+        search_title = f"%{elec[0]}%"
+
+        # FIX: The query now checks explicitly for the ELECTION_ID natively, and uses 
+        # the LIKE operator as a fallback to sweep up any older NULL records.
         cursor.execute("""
             SELECT DETECTED_AT, FRAUD_TYPE, DESCRIPTION, IP_ADDRESS 
             FROM FRAUD_LOGS 
             WHERE ELECTION_ID = :1 
+               OR DESCRIPTION LIKE :2
             ORDER BY DETECTED_AT ASC
-        """, (election_id,))
+        """, (election_id, search_title))
         fraud_logs = cursor.fetchall()
 
-        # 2. Fetch System Audit Logs referencing this election
-        search_term_1 = f"%Election {election_id} %"
-        search_term_2 = f"%Election ID {election_id}%"
+        # FIX: Intelligent pattern matching for Audit Logs to capture all dynamic formats
+        search_id_end = f"%Election {election_id}"
+        search_id_space = f"%Election {election_id} %"
         cursor.execute("""
             SELECT ACTION_TIME, ACTION_TYPE, DETAILS 
             FROM AUDIT_LOGS 
-            WHERE DETAILS LIKE :1 OR DETAILS LIKE :2
+            WHERE DETAILS LIKE :1 
+               OR DETAILS LIKE :2 
+               OR DETAILS LIKE :3
             ORDER BY ACTION_TIME ASC
-        """, (search_term_1, search_term_2))
+        """, (search_id_end, search_id_space, search_title))
         audit_logs = cursor.fetchall()
         
-        # --- REPORTLAB PDF GENERATION ---
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=0.5*inch, leftMargin=0.5*inch, topMargin=0.5*inch, bottomMargin=0.5*inch)
         story = []
@@ -737,15 +814,12 @@ def export_fraud_log(election_id):
         subtitle_style = ParagraphStyle(name="SubTitle", parent=styles["Heading2"], textColor=NAVY, spaceAfter=10, spaceBefore=20)
         body_style = ParagraphStyle(name="Body", parent=styles["BodyText"], fontSize=9)
         
-        # Document Header
-        story.append(Paragraph(f"VoteCore: Comprehensive Security Ledger", title_style))
+        story.append(Paragraph("VoteCore: Comprehensive Security Ledger", title_style))
         story.append(Paragraph(f"Election: {elec[0]} (ID: {election_id}) - Status: {elec[1]}", body_style))
         story.append(Paragraph(f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", body_style))
         story.append(Spacer(1, 0.25 * inch))
         
-        # =========================================
-        # SECTION 1: SYSTEM AUDIT TRAIL
-        # =========================================
+        # Section 1: Audit Trail
         story.append(Paragraph("Part 1: Administrative Audit Trail", subtitle_style))
         audit_table_data = [[
             Paragraph("<b>Timestamp</b>", body_style), 
@@ -780,9 +854,7 @@ def export_fraud_log(election_id):
         ]))
         story.append(audit_table)
 
-        # =========================================
-        # SECTION 2: FRAUD DETECTION LOG
-        # =========================================
+        # Section 2: Fraud Log
         story.append(Paragraph("Part 2: Active Fraud Alerts", subtitle_style))
         fraud_table_data = [[
             Paragraph("<b>Timestamp</b>", body_style), 
@@ -841,16 +913,16 @@ def create_election():
     data = request_json()
     conn = get_connection(); cursor = conn.cursor()
     try:
-        orgid = clean_text(data.get("orgid"), "Host Jurisdiction ID", 40).upper()
+        jurisdiction_id = clean_text(data.get("orgid"), "Host Jurisdiction ID", 40).upper()
         title = clean_text(data.get("title"), "Election title", 160)
         description = clean_text(data.get("description"), "Description", 2_000)
         
-        cursor.execute("SELECT COUNT(*) FROM ORGANIZATION WHERE ORGID = :1", (orgid,))
+        cursor.execute("SELECT COUNT(*) FROM HOST_JURISDICTION WHERE JURISDICTION_ID = :1", (jurisdiction_id,))
         if cursor.fetchone()[0] == 0:
-            cursor.execute("INSERT INTO ORGANIZATION (ORGID, ORG_NAME, IS_ACTIVE) VALUES (:1, :2, 1)", (orgid, orgid))
+            cursor.execute("INSERT INTO HOST_JURISDICTION (JURISDICTION_ID, NAME, IS_ACTIVE) VALUES (:1, :2, 1)", (jurisdiction_id, jurisdiction_id))
 
-        cursor.execute("INSERT INTO ELECTION (ORGID, TITLE, DESCRIPTION, START_DATE, END_DATE, STATUS) VALUES (:1, :2, :3, SYSTIMESTAMP, SYSTIMESTAMP + INTERVAL '7' DAY, 'UPCOMING')",
-                       (orgid, title, description))
+        cursor.execute("INSERT INTO ELECTION (JURISDICTION_ID, TITLE, DESCRIPTION, START_DATE, END_DATE, STATUS) VALUES (:1, :2, :3, SYSTIMESTAMP, SYSTIMESTAMP + INTERVAL '7' DAY, 'UPCOMING')",
+                       (jurisdiction_id, title, description))
         conn.commit(); return jsonify({"message": "Election initialized successfully!"}), 201
     except Exception as e:
         if conn: conn.rollback()
@@ -874,48 +946,6 @@ def remove_election(election_id):
         
         conn.commit()
         return jsonify({"message": "Election successfully archived and removed from public lists."}), 200
-    except Exception as e:
-        if conn: conn.rollback()
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
-
-@app.route("/api/admin/pending-organizers", methods=["GET"])
-def get_pending_organizers():
-    if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
-    conn = get_connection(); cursor = conn.cursor()
-    try:
-        cursor.execute("""
-            SELECT OA.APPLICATION_ID, E.TITLE, U.FIRST_NAME || ' ' || U.LAST_NAME, E.ELECTION_ID
-            FROM ORGANIZER_APPLICATION OA
-            JOIN ELECTION E ON OA.ELECTION_ID = E.ELECTION_ID
-            JOIN UACCOUNT U ON OA.PID = U.PID
-            WHERE OA.STATUS = 'PENDING' AND E.ORGANIZER_PID IS NULL
-        """)
-        apps = [{"app_id": r[0], "election_title": r[1], "user_name": r[2], "election_id": r[3]} for r in cursor.fetchall()]
-        return jsonify({"pending_organizers": apps}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    finally:
-        cursor.close(); conn.close()
-
-@app.route("/api/admin/approve-organizer/<int:app_id>", methods=["POST"])
-def approve_organizer(app_id):
-    if not session.get("is_super_admin"): return jsonify({"error": "Unauthorized"}), 403
-    conn = get_connection(); cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT ELECTION_ID, PID FROM ORGANIZER_APPLICATION WHERE APPLICATION_ID = :1 AND STATUS = 'PENDING'", (app_id,))
-        row = cursor.fetchone()
-        if not row: return jsonify({"error": "Application not found."}), 404
-        
-        elec_id, applicant_pid = row[0], row[1]
-        
-        cursor.execute("UPDATE ELECTION SET ORGANIZER_PID = :1, ORGANIZER_APPOINTED_AT = SYSTIMESTAMP, ORGANIZER_APPOINTED_BY = :2 WHERE ELECTION_ID = :3", 
-                       (applicant_pid, session.get("pid"), elec_id))
-        cursor.execute("UPDATE ORGANIZER_APPLICATION SET STATUS = 'APPROVED', REVIEWED_AT = SYSTIMESTAMP, REVIEWED_BY = :1 WHERE APPLICATION_ID = :2", 
-                       (session.get("pid"), app_id))
-        cursor.execute("UPDATE ORGANIZER_APPLICATION SET STATUS = 'REJECTED', REASON = 'Position filled' WHERE ELECTION_ID = :1 AND STATUS = 'PENDING'", (elec_id,))
-        conn.commit(); return jsonify({"message": "Organizer appointed successfully!"}), 200
     except Exception as e:
         if conn: conn.rollback()
         return jsonify({"error": str(e)}), 500
@@ -1016,7 +1046,6 @@ def update_election_status(election_id):
         if not elec or elec[0] != session.get("pid"): return jsonify({"error": "Unauthorized."}), 403
 
         cursor.execute("UPDATE ELECTION SET STATUS = :1 WHERE ELECTION_ID = :2", (new_status, election_id))
-        
         cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'PHASE_UPDATED', :2, SYSTIMESTAMP)", 
                        (session.get("pid"), f"Election {election_id} phase changed to {new_status}"))
         
@@ -1037,8 +1066,10 @@ def get_pending_parties(election_id):
             return jsonify({"error": "Forbidden."}), 403
         
         cursor.execute("""
-            SELECT EP.ELECTION_PARTY_ID, O.ORG_NAME, U.FIRST_NAME || ' ' || U.LAST_NAME
-            FROM ELECTION_PARTY EP JOIN ORGANIZATION O ON EP.ORGID = O.ORGID JOIN UACCOUNT U ON EP.LEADER_PID = U.PID
+            SELECT EP.ELECTION_PARTY_ID, PP.NAME, U.FIRST_NAME || ' ' || U.LAST_NAME
+            FROM ELECTION_PARTY EP 
+            JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID 
+            JOIN UACCOUNT U ON EP.CAMPAIGN_LEADER_PID = U.PID
             WHERE EP.ELECTION_ID = :1 AND EP.STATUS = 'PENDING'
         """, (election_id,))
         parties = [{"party_id": r[0], "party_name": r[1], "leader_name": r[2]} for r in cursor.fetchall()]
@@ -1052,7 +1083,7 @@ def get_pending_parties(election_id):
 def approve_election_party(party_id):
     conn = get_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("SELECT ELECTION_ID, LEADER_PID FROM ELECTION_PARTY WHERE ELECTION_PARTY_ID = :1", (party_id,))
+        cursor.execute("SELECT ELECTION_ID, CAMPAIGN_LEADER_PID FROM ELECTION_PARTY WHERE ELECTION_PARTY_ID = :1", (party_id,))
         party = cursor.fetchone()
         if not party: return jsonify({"error": "Party not found."}), 404
         
@@ -1061,7 +1092,6 @@ def approve_election_party(party_id):
         
         cursor.execute("UPDATE ELECTION_PARTY SET STATUS = 'APPROVED', REVIEWED_AT = SYSTIMESTAMP, REVIEWED_BY = :1 WHERE ELECTION_PARTY_ID = :2", (session.get("pid"), party_id))
         cursor.execute("INSERT INTO ELECTION_PARTY_MEMBER (ELECTION_PARTY_ID, ELECTION_ID, PID, MEMBER_ROLE, STATUS) VALUES (:1, :2, :3, 'PARTY_LEADER', 'APPROVED')", (party_id, party[0], party[1]))
-        
         cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'PARTY_APPROVED', :2, SYSTIMESTAMP)", 
                        (session.get("pid"), f"Approved Party ID {party_id} for Election {party[0]}"))
 
@@ -1082,9 +1112,12 @@ def get_pending_candidates(election_id):
             return jsonify({"error": "Forbidden."}), 403
         
         cursor.execute("""
-            SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE, C.MANIFESTO, O.ORG_NAME
-            FROM CANDIDATE C JOIN UACCOUNT U ON C.PID = U.PID JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
-            JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID JOIN ORGANIZATION O ON EP.ORGID = O.ORGID
+            SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE, C.MANIFESTO, NVL(PP.NAME, 'Independent')
+            FROM CANDIDATE C 
+            JOIN UACCOUNT U ON C.PID = U.PID 
+            JOIN ELECTION_POSITION POS ON C.POSITION_ID = POS.POSITION_ID
+            LEFT JOIN ELECTION_PARTY EP ON C.ELECTION_PARTY_ID = EP.ELECTION_PARTY_ID 
+            LEFT JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID
             WHERE C.ELECTION_ID = :1 AND C.STATUS = 'PENDING'
         """, (election_id,))
         candidates = [{"candidate_id": r[0], "name": f"{r[1]} ({r[4]})", "position": r[2], "manifesto": r[3]} for r in cursor.fetchall()]
@@ -1106,7 +1139,6 @@ def approve_candidate(candidate_id):
         if cursor.fetchone()[0] != session.get("pid"): return jsonify({"error": "Forbidden."}), 403
         
         cursor.execute("UPDATE CANDIDATE SET STATUS = 'ACTIVE', ORGANIZER_APPROVED_AT = SYSTIMESTAMP, ORGANIZER_APPROVED_BY = :1 WHERE CANDIDATE_ID = :2", (session.get("pid"), candidate_id))
-        
         cursor.execute("INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) VALUES (:1, 'TICKET_APPROVED', :2, SYSTIMESTAMP)", 
                        (session.get("pid"), f"Validated Ticket ID {candidate_id} for Election {cand[0]}"))
 

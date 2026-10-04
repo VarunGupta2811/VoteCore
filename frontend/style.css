@@ -38,30 +38,30 @@
    on gold, which is too light for white text to sit on comfortably).
    ============================================================================ */
 :root {
-    /* --- Ink (navy) surfaces — the "desk" the ballot paper sits on --- */
-    --ink-950: #0B1B33;   /* deepest surface: page background, super-admin accent */
-    --ink-800: #16294D;   /* secondary panel navy */
-    --ink-700: #223B67;   /* borders / dividers on dark surfaces */
+    /* --- Indigo surfaces — shared with the live-results experience --- */
+    --ink-950: #0F172A;   /* deepest indigo surface */
+    --ink-800: #28225B;   /* lilac-tinted secondary panel */
+    --ink-700: #334155;   /* borders / dividers on dark surfaces */
 
     /* --- Paper surfaces — the "ballot paper" cards sit on the desk --- */
-    --paper: #F5F7FB;         /* card surface */
-    --paper-muted: #E4E9F2;   /* subtle inset panels, dividers on paper */
+    --paper: #F8F8FF;         /* soft lilac card surface */
+    --paper-muted: #E6E8F7;   /* subtle lilac inset panels and dividers */
     --paper-strong: #FFFFFF;  /* inputs, highest-contrast surface */
 
     /* --- Text on paper --- */
-    --ink-text: #101828;    /* primary body text */
-    --muted-text: #5B6478;  /* secondary / helper text */
+    --ink-text: #18233D;    /* primary body text */
+    --muted-text: #52617B;  /* secondary / helper text */
 
     /* --- Accent palette (semantic, not decorative) --- */
-    --civic-blue: #2657A6;        /* primary action / links / info */
-    --civic-blue-dark: #1C4383;   /* primary action hover/active */
-    --verified-teal: #0B7A5F;     /* success / verified / active election */
-    --verified-teal-dark: #095F49;
+    --civic-blue: #6D5BD0;        /* indigo primary action / links / info */
+    --civic-blue-dark: #4D3DB1;   /* primary action hover/active */
+    --verified-teal: #168F85;     /* teal success / verified / active election */
+    --verified-teal-dark: #0F6B71;
     --seal-crimson: #A6332A;      /* danger / fraud alerts / destructive */
     --seal-crimson-dark: #832822;
-    --gold-foil: #C79A3D;         /* super-admin / highlight — pair with dark text */
-    --organizer-violet: #4B3876;  /* organizer role accent */
-    --organizer-violet-dark: #392A5C;
+    --gold-foil: #43C7C5;         /* teal highlight — pair with dark text */
+    --organizer-violet: #8B5CF6;  /* lilac organizer role accent */
+    --organizer-violet-dark: #6D43D8;
     --slate: #4B5768;             /* neutral secondary action (e.g. "Back") */
     --slate-dark: #38424F;
 
@@ -143,13 +143,15 @@ body {
        an external asset that can fail to load. A designed gradient gives
        full control over contrast everywhere, loads instantly, and reads
        as "engraved ledger" rather than "stock background." */
-    background-color: var(--ink-950);
+    background-color: #0f172a;
     background-image:
-        radial-gradient(circle at 18% -8%, var(--ink-800), transparent 55%),
-        radial-gradient(circle at 100% 110%, var(--ink-700), transparent 45%),
-        repeating-linear-gradient(135deg, rgba(199, 154, 61, 0.035) 0 2px, transparent 2px 26px);
+        radial-gradient(circle at 4% 10%, rgba(139, 92, 246, 0.36), transparent 28rem),
+        radial-gradient(circle at 94% 22%, rgba(45, 212, 191, 0.18), transparent 26rem),
+        radial-gradient(circle at 54% 105%, rgba(196, 181, 253, 0.13), transparent 30rem),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(45deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
     background-attachment: fixed;
-    background-size: cover, cover, 220px 220px;
+    background-size: auto, auto, auto, 22px 22px, 22px 22px;
 }
 
 /* ============================================================================
@@ -223,9 +225,9 @@ h1::before {
     border-radius: 50%;
     opacity: 0.9;
     background:
-        repeating-conic-gradient(from 0deg, rgba(199, 154, 61, 0.16) 0deg 1.6deg, transparent 1.6deg 8deg),
-        radial-gradient(circle, transparent 52%, rgba(199, 154, 61, 0.14) 53%, transparent 55%),
-        radial-gradient(circle, transparent 68%, rgba(199, 154, 61, 0.10) 69%, transparent 71%);
+        repeating-conic-gradient(from 0deg, rgba(167, 139, 250, 0.18) 0deg 1.6deg, transparent 1.6deg 8deg),
+        radial-gradient(circle, transparent 52%, rgba(45, 212, 191, 0.15) 53%, transparent 55%),
+        radial-gradient(circle, transparent 68%, rgba(167, 139, 250, 0.12) 69%, transparent 71%);
 }
 
 h2, h3 {
@@ -1973,6 +1975,118 @@ body.results-page {
     background: linear-gradient(145deg, #f2fffb, #e1f8f4);
 }
 
+/* --- Super-admin hosting review workspace -------------------------------- */
+.hosting-requests-card {
+    grid-column: 1 / -1;
+    padding: clamp(1.25rem, 3vw, 2rem) !important;
+}
+.hosting-requests-card .card-intro { max-width: 68ch; }
+#hostRequestsContainer {
+    min-height: 9rem;
+    max-height: 34rem;
+    display: grid;
+    gap: 0.85rem;
+    margin-top: 1.25rem;
+    padding: 0.85rem;
+    border: 1px solid rgba(167, 139, 250, 0.26) !important;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #eef2ff, #e8f8f7) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.76);
+}
+.hosting-request-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.25rem;
+    align-items: center;
+    padding: 1.15rem 1.2rem;
+    border: 1px solid #d8d8f0;
+    border-left: 4px solid #8b5cf6;
+    border-radius: 0.85rem;
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 8px 18px rgba(66, 58, 143, 0.08);
+}
+.hosting-request-card:hover {
+    border-color: #a78bfa;
+    box-shadow: 0 12px 24px rgba(66, 58, 143, 0.14);
+}
+.hosting-request-content { min-width: 0; }
+.hosting-request-label {
+    margin: 0 0 0.28rem;
+    color: #6d5bd0 !important;
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+}
+.hosting-request-card h3 {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: #18233d !important;
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    line-height: 1.3;
+}
+.hosting-request-organization {
+    margin: 0.32rem 0 0;
+    color: #0f766e !important;
+    font-size: 0.88rem;
+    font-weight: 750;
+}
+.hosting-request-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.7rem;
+    margin: 0.55rem 0 0;
+    color: #52617b !important;
+    font-size: 0.8rem;
+}
+.hosting-request-meta strong { color: #334155; }
+.hosting-request-meta span {
+    padding-left: 0.7rem;
+    border-left: 1px solid #cbd5e1;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+}
+.hosting-request-description {
+    max-width: 76ch;
+    margin: 0.65rem 0 0;
+    color: #475569 !important;
+    font-size: 0.88rem;
+    font-style: italic;
+    line-height: 1.55;
+}
+.hosting-request-action {
+    min-width: 11rem;
+    padding: 0.78rem 0.9rem !important;
+    white-space: nowrap;
+}
+.hosting-request-action span { margin-left: 0.35rem; }
+.hosting-request-empty,
+.hosting-request-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 7rem;
+    color: #52617b;
+    font-size: 0.9rem;
+    text-align: center;
+}
+.hosting-request-empty { gap: 0.8rem; }
+.hosting-request-empty > span {
+    display: grid;
+    width: 2.2rem;
+    height: 2.2rem;
+    place-items: center;
+    border-radius: 50%;
+    background: #ccfbf1;
+    color: #0f766e;
+    font-weight: 800;
+}
+.hosting-request-empty strong { color: #18233d; }
+.hosting-request-empty p { margin: 0.15rem 0 0; }
+.hosting-request-error { margin: 0; color: var(--seal-crimson) !important; }
+
 @media (max-width: 599px) {
     .election-page .top-nav { padding-right: 1rem; padding-left: 1rem; }
     .election-page .top-nav::after { left: 1rem; }
@@ -1981,4 +2095,6 @@ body.results-page {
     .election-hero { padding-right: 0; padding-left: 0; }
     .election-hero::before { width: 22rem; }
     .results-page .result-card .section-heading { align-items: flex-start; }
+    .hosting-request-card { grid-template-columns: 1fr; gap: 1rem; }
+    .hosting-request-action { width: 100%; }
 }
