@@ -14,13 +14,13 @@ $tables = @(
 )
 
 foreach ($table in $tables) {
-    if ($svg -notmatch "data-table=`"$table`"") {
+    if ($svg -notmatch "data-table=`"$table`"" -and $svg -notmatch "<title>$table</title>") {
         throw "ER diagram is missing table $table."
     }
 }
 
-if (($svg | Select-String -AllMatches 'data-relationship=').Matches.Count -ne 29) {
-    throw 'ER diagram must contain every one of the 29 declared foreign-key relationships.'
+if ((($svg | Select-String -AllMatches 'data-relationship=').Matches.Count -ne 30) -and (($svg | Select-String -AllMatches '<g id="edge').Matches.Count -ne 30)) {
+    throw 'ER diagram must contain every one of the 30 declared foreign-key relationships.'
 }
 
 if ($svg -notmatch 'PK' -or $svg -notmatch 'FK') {

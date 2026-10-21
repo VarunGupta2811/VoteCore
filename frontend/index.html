@@ -22,6 +22,7 @@
             <label for="password">Password</label><input type="password" id="password" placeholder="Enter your password" autocomplete="current-password">
             <button class="btn btn-primary btn-full" onclick="login()">Secure sign in <span>→</span></button>
             <p id="message" class="message"></p>
+            <button class="text-action" type="button" onclick="showForgotPassword()">Forgot your password? Reset it <span>→</span></button>
             <button class="text-action" type="button" onclick="toggleForms()">New to VoteCore? Create your account <span>→</span></button>
         </section>
         <section id="otpForm" class="card auth-card otp-card" style="display: none;">
@@ -31,6 +32,33 @@
             <button class="btn btn-success btn-full" onclick="verifyOTP()">Verify & enter <span>→</span></button>
             <p id="otpMessage" class="message" style="display: none;"></p>
             <button class="text-action text-action-danger" type="button" onclick="window.location.reload()">Cancel and return</button>
+        </section>
+        <section id="forgotPasswordForm" class="card auth-card" style="display: none;">
+            <div class="card-kicker">Account recovery</div>
+            <h2>Reset your password</h2>
+            <p class="card-intro">Verify your registered email address to receive a six-digit security code.</p>
+            <div id="forgotStep1">
+                <label for="resetEmail">Email address</label>
+                <input type="email" id="resetEmail" placeholder="you@example.com" autocomplete="email">
+                <button class="btn btn-primary btn-full" onclick="sendResetOTP()">Send recovery code <span>→</span></button>
+            </div>
+            <div id="forgotStep2" style="display: none;">
+                <label for="resetOtpCode">One-time passcode</label>
+                <input type="text" id="resetOtpCode" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
+                <div class="form-grid">
+                    <div>
+                        <label for="resetNewPassword">New password *</label>
+                        <input type="password" id="resetNewPassword" placeholder="Create a password" autocomplete="new-password">
+                    </div>
+                    <div>
+                        <label for="resetConfirmPassword">Confirm password *</label>
+                        <input type="password" id="resetConfirmPassword" placeholder="Repeat your password" autocomplete="new-password">
+                    </div>
+                </div>
+                <button class="btn btn-success btn-full" onclick="submitPasswordReset()">Update password <span>→</span></button>
+            </div>
+            <p id="forgotMessage" class="message" style="display: none;"></p>
+            <button class="text-action" type="button" onclick="backToLogin()">Remembered your password? Sign in <span>→</span></button>
         </section>
         <section id="registerForm" class="card auth-card registration-card" style="display: none;">
             <div class="card-kicker">Voter enrollment</div><h2>Build your secure identity</h2>

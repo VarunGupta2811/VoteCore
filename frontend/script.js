@@ -24,10 +24,17 @@ window.fetch = function (input, init = {}) {
     return nativeFetch(url, init);
 };
 
+// ============================================================
+// FORM NAVIGATION & ACCOUNT RECOVERY
+// ============================================================
 function toggleForms() {
     const loginForm = document.getElementById("loginForm");
     const registerForm = document.getElementById("registerForm");
     const otpForm = document.getElementById("otpForm");
+    const forgotForm = document.getElementById("forgotPasswordForm");
+
+    if (forgotForm) forgotForm.style.display = "none";
+
     if (loginForm && loginForm.style.display === "none" && (!otpForm || otpForm.style.display === "none")) {
         loginForm.style.display = "block";
         if (registerForm) registerForm.style.display = "none";
@@ -39,6 +46,130 @@ function toggleForms() {
     }
 }
 
+function showForgotPassword() {
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const otpForm = document.getElementById("otpForm");
+    const forgotForm = document.getElementById("forgotPasswordForm");
+
+    if (loginForm) loginForm.style.display = "none";
+    if (registerForm) registerForm.style.display = "none";
+    if (otpForm) otpForm.style.display = "none";
+
+    if (forgotForm) {
+        forgotForm.style.display = "block";
+        document.getElementById("forgotStep1").style.display = "block";
+        document.getElementById("forgotStep2").style.display = "none";
+        const msg = document.getElementById("forgotMessage");
+        if (msg) msg.style.display = "none";
+    }
+}
+
+function backToLogin() {
+    const loginForm = document.getElementById("loginForm");
+    const registerForm = document.getElementById("registerForm");
+    const otpForm = document.getElementById("otpForm");
+    const forgotForm = document.getElementById("forgotPasswordForm");
+
+    if (forgotForm) forgotForm.style.display = "none";
+    if (registerForm) registerForm.style.display = "none";
+    if (otpForm) otpForm.style.display = "none";
+    if (loginForm) loginForm.style.display = "block";
+}
+
+async function sendResetOTP() {
+    const email = document.getElementById("resetEmail").value.trim();
+    const msg = document.getElementById("forgotMessage");
+    msg.style.display = "block";
+    msg.style.color = "white";
+
+    if (!email) {
+        msg.style.backgroundColor = "#e74c3c";
+        msg.innerText = "Please enter your registered email address.";
+        return;
+    }
+
+    msg.style.backgroundColor = "#f39c12";
+    msg.innerText = "Sending recovery OTP...";
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/forgot-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            msg.style.backgroundColor = "#e74c3c";
+            msg.innerText = data.error || "Failed to send recovery OTP.";
+            return;
+        }
+
+        document.getElementById("forgotStep1").style.display = "none";
+        document.getElementById("forgotStep2").style.display = "block";
+        msg.style.backgroundColor = "#3498db";
+        msg.innerText = data.message;
+    } catch (e) {
+        msg.style.backgroundColor = "#e74c3c";
+        msg.innerText = "Backend is offline.";
+    }
+}
+
+async function submitPasswordReset() {
+    const email = document.getElementById("resetEmail").value.trim();
+    const otp = document.getElementById("resetOtpCode").value.trim();
+    const newPassword = document.getElementById("resetNewPassword").value;
+    const confirmPassword = document.getElementById("resetConfirmPassword").value;
+    const msg = document.getElementById("forgotMessage");
+    msg.style.display = "block";
+    msg.style.color = "white";
+
+    if (!otp || otp.length !== 6 || !newPassword || !confirmPassword) {
+        msg.style.backgroundColor = "#e74c3c";
+        msg.innerText = "All fields and a valid 6-digit OTP are required.";
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        msg.style.backgroundColor = "#e74c3c";
+        msg.innerText = "Passwords do not match.";
+        return;
+    }
+
+    msg.style.backgroundColor = "#f39c12";
+    msg.innerText = "Updating password...";
+
+    try {
+        const response = await fetch(`${API_URL}/api/auth/reset-password`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email, otp: otp, new_password: newPassword })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            msg.style.backgroundColor = "#e74c3c";
+            msg.innerText = data.error || "Password reset failed.";
+            return;
+        }
+
+        msg.style.backgroundColor = "#2ecc71";
+        msg.innerText = data.message;
+        setTimeout(() => {
+            backToLogin();
+            document.getElementById("email").value = email;
+            document.getElementById("resetOtpCode").value = "";
+            document.getElementById("resetNewPassword").value = "";
+            document.getElementById("resetConfirmPassword").value = "";
+        }, 2000);
+    } catch (e) {
+        msg.style.backgroundColor = "#e74c3c";
+        msg.innerText = "Backend is offline.";
+    }
+}
+
+// ============================================================
+// SESSION & AUTHENTICATION HELPERS
+// ============================================================
 async function checkLoginStatus() {
     window.scrollTo(0, 0);
     const user = await refreshUserFromBackend();
@@ -73,7 +204,10 @@ function escapeHtml(value) {
 async function refreshUserFromBackend() {
     try {
         const response = await fetch(`${API_URL}/api/auth/me`, { method: "GET", credentials: "include" });
-        if (!response.ok) return getCurrentUser();
+        if (!response.ok) {
+            localStorage.removeItem("votingUser");
+            return null;
+        }
         const data = await response.json();
         if (data.user) {
             if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
@@ -96,22 +230,22 @@ async function registerUser() {
     const voterId = document.getElementById("regVoterId").value.trim().toUpperCase();
     const country = document.getElementById("regCountry") ? document.getElementById("regCountry").value : "India";
     const state = document.getElementById("regState") ? document.getElementById("regState").value : "";
-
+    
     const msg = document.getElementById("regMessage");
-    msg.style.display = "block";
+    msg.style.display = "block"; 
     msg.style.color = "white";
 
     if (!firstName || !lastName || !email || !mobile || !password || !confirmPassword || !dob || !aadhaar || !voterId || !state) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "All fields marked with * are required.";
+        msg.style.backgroundColor = "#e74c3c"; 
+        msg.innerText = "All fields marked with * are required."; 
         return;
     }
     if (password !== confirmPassword) {
-        msg.style.backgroundColor = "#e74c3c";
-        msg.innerText = "Passwords do not match.";
+        msg.style.backgroundColor = "#e74c3c"; 
+        msg.innerText = "Passwords do not match."; 
         return;
     }
-    msg.style.backgroundColor = "#f39c12";
+    msg.style.backgroundColor = "#f39c12"; 
     msg.innerText = "Verifying Requirements & Generating OTP...";
 
     try {
@@ -182,7 +316,7 @@ async function verifyOTP() {
             if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
             msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Registration verified! Redirecting to login...";
-            setTimeout(() => {
+            setTimeout(() => { 
                 document.getElementById("otpForm").style.display = "none";
                 document.getElementById("loginForm").style.display = "block";
                 document.getElementById("email").value = pendingRegEmail;
@@ -202,7 +336,7 @@ async function verifyOTP() {
             if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
             if (data.user) saveCurrentUser(data.user);
             msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Login Verified! Redirecting...";
-
+            
             setTimeout(() => {
                 window.location.href = (data.user && (data.user.is_super_admin || data.user.is_organizer)) ? "admin.html" : "dashboard.html";
             }, 1000);
@@ -211,7 +345,7 @@ async function verifyOTP() {
 }
 
 async function logout() {
-    try { await fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" }); } catch (e) { }
+    try { await fetch(`${API_URL}/api/auth/logout`, { method: "POST", credentials: "include" }); } catch (e) {}
     localStorage.removeItem("votingUser");
     localStorage.removeItem("votingCsrfToken");
     window.location.href = "index.html";
@@ -219,7 +353,7 @@ async function logout() {
 
 async function logoutAllDevices() {
     if (!confirm("Sign out of VoteCore on every device?")) return;
-    try { await fetch(`${API_URL}/api/auth/logout-all`, { method: "POST", credentials: "include" }); } catch (e) { }
+    try { await fetch(`${API_URL}/api/auth/logout-all`, { method: "POST", credentials: "include" }); } catch (e) {}
     localStorage.removeItem("votingUser");
     localStorage.removeItem("votingCsrfToken");
     window.location.href = "index.html";
@@ -235,11 +369,11 @@ async function loadProfile() {
         const p = data.profile;
         let mobileStr = p.mobile ? String(p.mobile) : "";
         if (mobileStr.length > 4) { mobileStr = mobileStr.slice(0, -4) + "XXXX"; }
-
+        
         document.getElementById("profName").value = `${p.first_name || ""} ${p.last_name || ""}`.trim();
         document.getElementById("profEmail").value = p.email || "";
         document.getElementById("profMobile").value = mobileStr;
-
+        
         document.getElementById("profVoterId").innerText = p.voter_id;
         document.getElementById("profAadhaar").innerText = p.aadhaar;
         document.getElementById("profStatus").innerText = p.is_verified ? "✅ Verified & Locked" : "❌ Unverified";
@@ -257,9 +391,12 @@ async function loadProfile() {
                 orgsList.appendChild(li);
             });
         }
-    } catch (e) { }
+    } catch (e) {}
 }
 
+// ============================================================
+// VOTER DASHBOARD & PAAS HOSTING
+// ============================================================
 async function loadDashboard() {
     displayWelcome();
     const user = await refreshUserFromBackend();
@@ -271,7 +408,7 @@ async function loadDashboard() {
         const hostBtn = document.getElementById("requestHostBtnContainer");
         if (hostBtn) hostBtn.style.display = "none";
     }
-
+    
     if (user.is_organizer) {
         const btn = document.getElementById("organizerBtnContainer");
         if (btn) btn.style.display = "block";
@@ -283,7 +420,7 @@ async function loadDashboard() {
         const response = await fetch(`${API_URL}/api/elections`, { method: "GET", credentials: "include" });
         const data = await response.json();
         if (!response.ok) { electionsElement.innerText = "Failed to load elections."; return; }
-
+        
         const elections = data.elections || [];
         if (elections.length === 0) { electionsElement.innerText = "No elections available."; return; }
 
@@ -302,11 +439,11 @@ async function loadDashboard() {
                 <button onclick="viewElection(${election.election_id})" style="margin-top: 10px;">View Election</button>
                 <button onclick="viewResults(${election.election_id})" style="margin-top: 10px; background-color: #34495e;">View Results</button>
             `;
-
+            
             if (user.is_super_admin && election.status === "COMPLETED") {
                 html += `<button onclick="removeElection(${election.election_id})" style="margin-top: 10px; background-color: #e74c3c;">Remove Election</button>`;
             }
-
+            
             div.innerHTML = html;
             electionsElement.appendChild(div);
         });
@@ -339,9 +476,9 @@ async function submitHostRequest() {
     const orgName = document.getElementById("hostOrgName").value.trim();
     const title = document.getElementById("hostTitle").value.trim();
     const desc = document.getElementById("hostDesc").value.trim();
-
+    
     if (!orgName || !title) { alert("Organization Name and Election Title are required."); return; }
-
+    
     try {
         const response = await fetch(`${API_URL}/api/elections/request-hosting`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -358,6 +495,9 @@ async function submitHostRequest() {
     } catch (e) { alert("Connection Error."); }
 }
 
+// ============================================================
+// DYNAMIC ELECTION VIEW (WITH SAFE DATA-PARTY ATTRIBUTE)
+// ============================================================
 async function loadElection() {
     displayWelcome();
     const user = await refreshUserFromBackend();
@@ -371,7 +511,7 @@ async function loadElection() {
         const electionResponse = await fetch(`${API_URL}/api/elections/${electionId}`, { method: "GET", credentials: "include" });
         const electionData = await electionResponse.json();
         const electionInfo = electionData.election;
-
+        
         if (electionResponse.ok) {
             document.getElementById("electionTitle").innerText = electionInfo.title || "";
             document.getElementById("electionDescription").innerText = electionInfo.description || "";
@@ -427,7 +567,7 @@ async function loadElection() {
 
         const partyResponse = await fetch(`${API_URL}/api/elections/${electionId}/parties`, { method: "GET", credentials: "include" });
         const partyData = await partyResponse.json();
-
+        
         let amIPartyLeader = false;
 
         html += `<div class="section-heading compact"><div><p class="card-kicker">Political Organizations</p><h2>Contesting Parties</h2></div>`;
@@ -435,7 +575,7 @@ async function loadElection() {
             html += `<button class="btn btn-gold" onclick="registerNewParty(${electionId})">+ Form a New Party</button>`;
         }
         html += `</div>`;
-
+        
         html += `<div class="election-grid" style="margin-bottom: 2rem;">`;
         if (partyData.parties && partyData.parties.length > 0) {
             partyData.parties.forEach(p => {
@@ -487,7 +627,7 @@ async function loadElection() {
         const candidateResponse = await fetch(`${API_URL}/api/elections/${electionId}/candidates`, { method: "GET", credentials: "include" });
         const candidateData = await candidateResponse.json();
         const candidates = candidateData.candidates || [];
-
+        
         if (candidates.length === 0) {
             if (electionInfo.status === "UPCOMING") {
                 html += `<p style="color: #5B6478;">Candidate tickets will be assigned by Party Leaders during the Nomination phase.</p>`;
@@ -497,7 +637,7 @@ async function loadElection() {
         } else {
             const grouped = {};
             candidates.forEach(c => {
-                if (!grouped[c.position]) grouped[c.position] = [];
+                if(!grouped[c.position]) grouped[c.position] = [];
                 grouped[c.position].push(c);
             });
 
@@ -535,28 +675,28 @@ async function registerForVoterRoll(electionId) {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/register-voter`, { method: "POST", credentials: "include" });
         const data = await response.json();
         alert(response.ok ? data.message : "Error: " + data.error);
-        if (response.ok) loadElection();
+        if(response.ok) loadElection(); 
     } catch (e) { alert("Connection Error."); }
 }
 
 async function registerNewParty(electionId) {
     const partyName = prompt("Enter the name of your new Political Party to contest in this election:");
     if (!partyName) return;
-
+    
     const manifesto = prompt("Enter your campaign manifesto or slogan for your Presidential run:");
     if (manifesto === null) return;
-
+    
     try {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/register-party`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                party_name: partyName,
-                manifesto: manifesto || "No manifesto provided."
+            body: JSON.stringify({ 
+                party_name: partyName, 
+                manifesto: manifesto || "No manifesto provided." 
             })
         });
         const data = await response.json();
         alert(response.ok ? data.message : "Error: " + data.error);
-        if (response.ok) loadElection();
+        if(response.ok) loadElection();
     } catch (e) { alert("Connection Error."); }
 }
 
@@ -578,7 +718,7 @@ async function fetchPartyMembersForDelegation(electionId) {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/my-party-members`, { credentials: "include" });
         const data = await response.json();
         if (response.ok && data.members && data.members.length > 0) {
-            select.innerHTML = `<option value="">-- Choose a Member --</option>` +
+            select.innerHTML = `<option value="">-- Choose a Member --</option>` + 
                 data.members.map(m => `<option value="${m.pid}">${escapeHtml(m.name)} (${escapeHtml(m.email)})</option>`).join("");
         } else {
             select.innerHTML = `<option value="">No approved members in your party yet</option>`;
@@ -593,7 +733,7 @@ async function fetchPositionsForDelegation(electionId) {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/positions`, { credentials: "include" });
         const data = await response.json();
         if (response.ok && data.positions && data.positions.length > 0) {
-            select.innerHTML = `<option value="">-- Choose a Position --</option>` +
+            select.innerHTML = `<option value="">-- Choose a Position --</option>` + 
                 data.positions.map(p => `<option value="${escapeHtml(p.title)}">${escapeHtml(p.title)}</option>`).join("");
         } else {
             select.innerHTML = `<option value="">No positions defined by Organizer</option>`;
@@ -608,7 +748,7 @@ async function assignCandidate(electionId) {
 
     if (!memberPid) { alert("Please select a party member."); return; }
     if (!position) { alert("Please select a ballot position."); return; }
-
+    
     try {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/assign-candidate`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -625,7 +765,7 @@ async function assignCandidate(electionId) {
 
 async function castVote(electionId, candidateId) {
     if (!confirm("Are you sure you want to securely cast your vote for this candidate?")) return;
-
+    
     const buttons = document.querySelectorAll(".vote-button");
     buttons.forEach(btn => {
         btn.dataset.originalText = btn.innerText;
@@ -639,19 +779,19 @@ async function castVote(electionId, candidateId) {
             body: JSON.stringify({ candidate_id: candidateId })
         });
         const data = await response.json();
-
+        
         if (response.ok) {
             alert(data.message || "Ballot cryptographically sealed and cast!");
-            loadElection();
+            loadElection(); 
             return;
         }
-
+        
         alert(data.error || "Unable to cast vote.");
         buttons.forEach(btn => {
             btn.disabled = false;
             btn.innerText = btn.dataset.originalText;
         });
-
+        
     } catch (e) {
         alert("Cannot connect to backend.");
         buttons.forEach(btn => {
@@ -676,18 +816,18 @@ async function loadResults() {
 
         const results = data.results || [];
         if (results.length === 0) { resultsElement.innerText = "No results available yet."; return; }
-
+        
         resultsElement.innerHTML = "";
         resultsElement.style.display = "block";
 
         const grouped = {};
         results.forEach(r => {
-            if (!grouped[r.position]) grouped[r.position] = [];
+            if(!grouped[r.position]) grouped[r.position] = [];
             grouped[r.position].push(r);
         });
 
         for (const [position, candidates] of Object.entries(grouped)) {
-            const winner = candidates[0];
+            const winner = candidates[0]; 
             let html = `<div class="content-divider"></div>`;
             html += `<div class="section-heading compact"><div><p class="card-kicker">Official Result</p><h2>${escapeHtml(position)}</h2></div></div>`;
 
@@ -706,7 +846,7 @@ async function loadResults() {
 
             html += `<div class="results-grid" style="margin-bottom: 2rem;">`;
             candidates.forEach(cand => {
-                const isWinnerStyle = (cand.candidate_id === winner.candidate_id && cand.total_votes > 0)
+                const isWinnerStyle = (cand.candidate_id === winner.candidate_id && cand.total_votes > 0) 
                     ? 'border-color: #0B7A5F; box-shadow: 0 4px 12px rgba(11,122,95,0.15);' : '';
                 html += `<div class="candidate-card" style="${isWinnerStyle}">
                     <h3>${escapeHtml(cand.candidate_name)}</h3>
@@ -728,18 +868,18 @@ async function loadAdminUI() {
 
     if (user.is_super_admin) {
         const sAdmin = document.getElementById("superAdminSection");
-        if (sAdmin) {
+        if(sAdmin) {
             sAdmin.style.display = "block";
             loadHostRequests();
             loadSuperAdminElections();
         }
-    }
-
+    } 
+    
     if (user.is_organizer) {
         const orgAdmin = document.getElementById("organizerSection");
-        if (orgAdmin) {
+        if(orgAdmin) {
             orgAdmin.style.display = "block";
-            loadOrganizerElections();
+            loadOrganizerElections(); 
         }
     }
 }
@@ -747,32 +887,33 @@ async function loadAdminUI() {
 async function loadHostRequests() {
     const container = document.getElementById("hostRequestsContainer");
     if (!container) return;
-    container.innerHTML = '<div class="hosting-request-loading">Loading hosting applications…</div>';
-
+    container.innerHTML = "Fetching platform requests...";
+    
     try {
         const response = await fetch(`${API_URL}/api/admin/host-requests`, { credentials: "include" });
         const data = await response.json();
         if (!response.ok) return;
-
+        
         if (data.host_requests && data.host_requests.length > 0) {
             let html = "";
             data.host_requests.forEach(req => {
-                html += `<article class="hosting-request-card">
-                    <div class="hosting-request-content">
-                        <p class="hosting-request-label">Hosting application</p>
-                        <h3>${escapeHtml(req.title)}</h3>
-                        <p class="hosting-request-organization">${escapeHtml(req.org_name)}</p>
-                        <p class="hosting-request-meta">Requester: <strong>${escapeHtml(req.user_name)}</strong><span>PID ${req.pid}</span></p>
-                        <p class="hosting-request-description">${escapeHtml(req.description || "No description provided.")}</p>
+                html += `<div style="padding: 12px; border-bottom: 1px solid #ddd; background: #fffdfaa3; margin-bottom: 8px; border-radius: 4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <strong style="color:#0B1B33; font-size:15px;">${escapeHtml(req.title)}</strong><br>
+                            <small style="color:#f39c12; font-weight:bold;">${escapeHtml(req.org_name)}</small><br>
+                            <small style="color:#5B6478;">Requester: ${escapeHtml(req.user_name)} (PID: ${req.pid})</small>
+                            <p style="margin:5px 0 0 0; font-size:13px; color:#333;"><i>${escapeHtml(req.description || "No description")}</i></p>
+                        </div>
+                        <button onclick="approveHostRequest(${req.request_id})" style="background-color: #0B7A5F; padding: 6px 12px; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;">Provision</button>
                     </div>
-                    <button class="btn btn-success hosting-request-action" onclick="approveHostRequest(${req.request_id})">Provision environment <span>→</span></button>
-                </article>`;
+                </div>`;
             });
             container.innerHTML = html;
-        } else {
-            container.innerHTML = '<div class="hosting-request-empty"><span>✓</span><div><strong>Queue clear</strong><p>No pending platform hosting requests.</p></div></div>';
+        } else { 
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending platform hosting requests.</p>"; 
         }
-    } catch (e) { container.innerHTML = '<p class="hosting-request-error">Unable to load hosting requests. Please try again.</p>'; }
+    } catch (e) { container.innerHTML = "<p style='color: red;'>Connection Error.</p>"; }
 }
 
 async function approveHostRequest(reqId) {
@@ -781,7 +922,7 @@ async function approveHostRequest(reqId) {
         const response = await fetch(`${API_URL}/api/admin/host-requests/${reqId}/approve`, { method: "POST", credentials: "include" });
         const data = await response.json();
         alert(response.ok ? data.message : "Error: " + data.error);
-        if (response.ok) {
+        if(response.ok) {
             loadHostRequests();
             loadSuperAdminElections();
         }
@@ -814,34 +955,34 @@ async function loadOrganizerElections() {
         const data = await res.json();
         if (res.ok && data.my_elections) {
             myElectionsCache = data.my_elections;
-
+            
             let optionsHTML = data.my_elections.map(e => `<option value="${e.election_id}">${escapeHtml(e.title)} (ID: ${e.election_id})</option>`).join("");
-            if (optionsHTML === "") optionsHTML = `<option value="">No elections assigned to you yet</option>`;
+            if(optionsHTML === "") optionsHTML = `<option value="">No elections assigned to you yet</option>`;
 
-            if (phaseSelect) {
+            if(phaseSelect) {
                 phaseSelect.innerHTML = optionsHTML;
                 syncPhaseDropdown();
                 phaseSelect.addEventListener("change", syncPhaseDropdown);
             }
-            if (posSelect) posSelect.innerHTML = optionsHTML;
-            if (voterSelect) voterSelect.innerHTML = optionsHTML;
-            if (scrutinySelect) {
+            if(posSelect) posSelect.innerHTML = optionsHTML;
+            if(voterSelect) voterSelect.innerHTML = optionsHTML;
+            if(scrutinySelect) {
                 scrutinySelect.innerHTML = optionsHTML;
-                if (data.my_elections.length > 0) fetchPendingCandidates();
+                if(data.my_elections.length > 0) fetchPendingCandidates(); 
             }
-            if (data.my_elections.length > 0) fetchPendingVoters();
+            if(data.my_elections.length > 0) fetchPendingVoters();
         }
-    } catch (e) { }
+    } catch (e) {}
 }
 
 function syncPhaseDropdown() {
     const electionId = document.getElementById("phaseElectionId").value;
     const statusSelect = document.getElementById("phaseSelect");
     if (!electionId || !statusSelect) return;
-
+    
     const selectedElection = myElectionsCache.find(e => e.election_id == electionId);
     if (selectedElection && selectedElection.status) {
-        statusSelect.value = selectedElection.status;
+        statusSelect.value = selectedElection.status; 
     }
 }
 
@@ -858,7 +999,7 @@ async function changeElectionPhase() {
         alert(response.ok ? data.message : data.error);
         if (response.ok) {
             const elec = myElectionsCache.find(e => e.election_id == electionId);
-            if (elec) elec.status = status;
+            if(elec) elec.status = status;
         }
     } catch (e) { alert("Connection error."); }
 }
@@ -867,7 +1008,7 @@ async function addElectionPosition() {
     const electionId = document.getElementById("positionElectionId").value;
     const title = document.getElementById("positionTitle").value.trim();
     if (!electionId || !title) { alert("Please select an election and enter a position title."); return; }
-
+    
     try {
         const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/positions`, {
             method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
@@ -883,13 +1024,13 @@ async function fetchPendingVoters() {
     const electionId = document.getElementById("voterRollElectionId").value;
     const container = document.getElementById("voterRollContainer");
     if (!electionId) return;
-
+    
     container.innerHTML = "Fetching pending voter applications...";
     try {
         const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-voters`, { credentials: "include" });
         const data = await response.json();
         if (!response.ok) return;
-
+        
         let html = "";
         if (data.pending_voters && data.pending_voters.length > 0) {
             data.pending_voters.forEach(v => {
@@ -905,7 +1046,7 @@ async function fetchPendingVoters() {
         } else {
             container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No pending voter requests.</p>";
         }
-    } catch (e) { }
+    } catch (e) {}
 }
 
 async function approveVoter(electionId, pid) {
@@ -917,7 +1058,7 @@ async function approveVoter(electionId, pid) {
         });
         const data = await response.json();
         alert(response.ok ? data.message : data.error);
-        fetchPendingVoters();
+        fetchPendingVoters(); 
     } catch (e) { alert("Connection error."); }
 }
 
@@ -925,14 +1066,14 @@ async function fetchPendingCandidates() {
     const electionId = document.getElementById("scrutinyElectionId").value;
     const container = document.getElementById("scrutinyContainer");
     if (!electionId) { container.innerHTML = "<p style='color: red;'>Please select an Election.</p>"; return; }
-
+    
     container.innerHTML = "Fetching pending records...";
     try {
         const partyRes = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-parties`, { credentials: "include" });
         const candRes = await fetch(`${API_URL}/api/admin/elections/${electionId}/pending-candidates`, { credentials: "include" });
         const partyData = await partyRes.json();
         const candData = await candRes.json();
-
+        
         let html = "";
         if (partyData.pending_parties && partyData.pending_parties.length > 0) {
             html += `<h4 style="margin: 0 0 10px 0; color: #f39c12; font-family: monospace;">PENDING PARTIES</h4>`;
@@ -943,7 +1084,7 @@ async function fetchPendingCandidates() {
                 </div>`;
             });
         }
-
+        
         if (candData.pending_candidates && candData.pending_candidates.length > 0) {
             html += `<h4 style="margin: 15px 0 10px 0; color: #2ecc71; font-family: monospace;">PENDING TICKETS</h4>`;
             candData.pending_candidates.forEach(cand => {
@@ -955,7 +1096,7 @@ async function fetchPendingCandidates() {
         }
         if (html === "") html = "<p style='color: #7f8c8d; margin: 0;'>No pending parties or tickets.</p>";
         container.innerHTML = html;
-    } catch (e) { }
+    } catch (e) {}
 }
 
 async function approveElectionParty(partyId) {
@@ -964,7 +1105,7 @@ async function approveElectionParty(partyId) {
         const response = await fetch(`${API_URL}/api/admin/parties/${partyId}/approve`, { method: "POST", credentials: "include" });
         const data = await response.json();
         alert(response.ok ? data.message : data.error);
-        fetchPendingCandidates();
+        fetchPendingCandidates(); 
     } catch (e) { alert("Connection error."); }
 }
 
@@ -974,7 +1115,7 @@ async function approveSingleCandidate(candidateId) {
         const response = await fetch(`${API_URL}/api/admin/candidates/${candidateId}/approve`, { method: "POST", credentials: "include" });
         const data = await response.json();
         alert(response.ok ? data.message : data.error);
-        fetchPendingCandidates();
+        fetchPendingCandidates(); 
     } catch (e) { alert("Connection error."); }
 }
 
@@ -986,9 +1127,9 @@ async function loadAuditLogs(containerId) {
         const response = await fetch(`${API_URL}/api/admin/audit-logs`, { credentials: "include" });
         const data = await response.json();
         if (!response.ok) return;
-        if (!data.audit_logs || data.audit_logs.length === 0) {
-            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No audit logs found.</p>";
-            return;
+        if (!data.audit_logs || data.audit_logs.length === 0) { 
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No audit logs found.</p>"; 
+            return; 
         }
 
         let html = '<table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">';
@@ -1004,7 +1145,7 @@ async function loadAuditLogs(containerId) {
         });
         html += '</table>';
         container.innerHTML = html;
-    } catch (error) { }
+    } catch (error) {}
 }
 
 async function loadFraudLogs(containerId) {
@@ -1015,9 +1156,9 @@ async function loadFraudLogs(containerId) {
         const response = await fetch(`${API_URL}/api/admin/fraud-logs`, { credentials: "include" });
         const data = await response.json();
         if (!response.ok) return;
-        if (!data.fraud_logs || data.fraud_logs.length === 0) {
-            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No fraud alerts found.</p>";
-            return;
+        if (!data.fraud_logs || data.fraud_logs.length === 0) { 
+            container.innerHTML = "<p style='color: #7f8c8d; margin: 0;'>No fraud alerts found.</p>"; 
+            return; 
         }
 
         let html = '<table style="width: 100%; text-align: left; border-collapse: collapse; font-size: 14px;">';
@@ -1033,7 +1174,7 @@ async function loadFraudLogs(containerId) {
         });
         html += '</table>';
         container.innerHTML = html;
-    } catch (error) { }
+    } catch (error) {}
 }
 
 function exportFraudLog() {

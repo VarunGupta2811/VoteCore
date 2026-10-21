@@ -60,7 +60,14 @@ def clean_text(value, field, maximum, required=True):
 
 @app.before_request
 def validate_server_session():
-    public_paths = {"/api/auth/register", "/api/auth/register-verify", "/api/auth/login", "/api/auth/verify-otp"}
+    public_paths = {
+        "/api/auth/register",
+        "/api/auth/register-verify",
+        "/api/auth/login",
+        "/api/auth/verify-otp",
+        "/api/auth/forgot-password",
+        "/api/auth/reset-password"
+    }
     if request.method == "OPTIONS" or not request.path.startswith("/api/") or request.path in public_paths: return None
     if not session.get("logged_in") or not session.get("db_session_id"): return jsonify({"error": "Unauthorized"}), 401
 
@@ -102,7 +109,7 @@ def send_otp_email(receiver_email, otp_code, user_name):
     return False
 
 # ============================================================
-# AUTHENTICATION & REGISTRATION
+# AUTHENTICATION, REGISTRATION & ACCOUNT RECOVERY
 # ============================================================
 @app.route("/api/auth/register", methods=["POST"])
 def register():
@@ -246,7 +253,7 @@ def verify_otp():
         user_row = cursor.fetchone()
         
         is_super_admin = (user_row[2].lower() == 'varun.vip2811@gmail.com')
-        cursor.execute("SELECT COUNT(*) FROM ELECTION WHERE ORGANIZER_PID = :1", (pid,))
+        cursor.execute("SELECT COUNT(*) FROM ELECTION WHERE ORGANIZER_PID = :1 AND STATUS != 'ARCHIVED'", (pid,))
         is_organizer = cursor.fetchone()[0] > 0
         
         db_session_id = str(uuid.uuid4())
@@ -256,8 +263,105 @@ def verify_otp():
         session.clear()
         csrf_token = secrets.token_urlsafe(32)
         session.update({"logged_in": True, "pid": int(pid), "email": user_row[2], "first_name": user_row[0], "last_name": user_row[1], "is_organizer": is_organizer, "is_super_admin": is_super_admin, "db_session_id": db_session_id, "csrf_token": csrf_token})
-        return jsonify({"message": "Login successful", "csrf_token": csrf_token, "user": {"pid": int(pid), "is_organizer": is_organizer, "is_super_admin": is_super_admin}}), 200
+        return jsonify({"message": "Login successful", "csrf_token": csrf_token, "user": {"pid": int(pid), "first_name": user_row[0], "last_name": user_row[1], "email": user_row[2], "is_organizer": is_organizer, "is_super_admin": is_super_admin}}), 200
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+@app.route("/api/auth/forgot-password", methods=["POST"])
+def forgot_password():
+    conn = cursor = None
+    try:
+        data = request_json()
+        email = clean_text(data.get("email"), "Email", 254).lower()
+
+        conn = get_connection(); cursor = conn.cursor()
+        cursor.execute("SELECT PID, FIRST_NAME, IS_ACTIVE FROM UACCOUNT WHERE LOWER(EMAIL) = :1", (email,))
+        row = cursor.fetchone()
+
+        if not row or not row[2]:
+            return jsonify({"error": "No active account found with that email address."}), 404
+
+        pid, first_name = row[0], row[1]
+        otp_code = str(secrets.randbelow(900000) + 100000)
+        otp_hash = bcrypt.hashpw(otp_code.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        if not send_otp_email(email, otp_code, first_name):
+            return jsonify({"error": "Could not deliver the recovery OTP email. Try again shortly."}), 503
+
+        cursor.execute("UPDATE OTP_VERIFICATION SET VERIFIED = 1 WHERE PID = :1 AND VERIFIED = 0", (pid,))
+        cursor.execute("""
+            INSERT INTO OTP_VERIFICATION (PID, OTP_CODE, OTP_CODE_HASH, EXPIRES_AT) 
+            VALUES (:1, :2, :3, SYSTIMESTAMP + INTERVAL '10' MINUTE)
+        """, (pid, otp_code, otp_hash))
+        conn.commit()
+
+        return jsonify({"message": "Recovery OTP sent to your email!", "email": email}), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        if conn: conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cursor: cursor.close()
+        if conn: conn.close()
+
+@app.route("/api/auth/reset-password", methods=["POST"])
+def reset_password():
+    conn = cursor = None
+    try:
+        data = request_json()
+        email = clean_text(data.get("email"), "Email", 254).lower()
+        user_otp = clean_text(data.get("otp"), "OTP", 10)
+        new_password = data.get("new_password", "")
+
+        password_pattern = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$')
+        if not password_pattern.match(new_password):
+            return jsonify({"error": "Password must be at least 8 characters long and include an uppercase letter, lowercase letter, number, and special character."}), 400
+
+        conn = get_connection(); cursor = conn.cursor()
+        cursor.execute("SELECT PID, IS_ACTIVE FROM UACCOUNT WHERE LOWER(EMAIL) = :1", (email,))
+        user_row = cursor.fetchone()
+        if not user_row or not user_row[1]:
+            return jsonify({"error": "Invalid account."}), 404
+
+        pid = user_row[0]
+        cursor.execute("""
+            SELECT OTP_ID, OTP_CODE, OTP_CODE_HASH 
+            FROM OTP_VERIFICATION 
+            WHERE PID = :1 AND VERIFIED = 0 AND SYSTIMESTAMP <= EXPIRES_AT 
+            ORDER BY CREATED_AT DESC FETCH FIRST 1 ROWS ONLY
+        """, (pid,))
+        otp_row = cursor.fetchone()
+
+        if not otp_row:
+            return jsonify({"error": "Invalid or expired recovery OTP."}), 401
+
+        if otp_row[2]:
+            if not bcrypt.checkpw(user_otp.encode("utf-8"), otp_row[2].encode("utf-8")):
+                return jsonify({"error": "Invalid or expired recovery OTP."}), 401
+        else:
+            if otp_row[1] != user_otp:
+                return jsonify({"error": "Invalid or expired recovery OTP."}), 401
+
+        hashed_pw = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+        cursor.execute("UPDATE OTP_VERIFICATION SET VERIFIED = 1 WHERE OTP_ID = :1", (otp_row[0],))
+        cursor.execute("UPDATE UACCOUNT SET PASSWORD_HASH = :1 WHERE PID = :2", (hashed_pw, pid))
+        cursor.execute("UPDATE USER_SESSIONS SET IS_ACTIVE = 0 WHERE PID = :1 AND IS_ACTIVE = 1", (pid,))
+        cursor.execute("""
+            INSERT INTO AUDIT_LOGS (PID, ACTION_TYPE, DETAILS, ACTION_TIME) 
+            VALUES (:1, 'PASSWORD_RESET', 'User reset account password via email OTP verification', SYSTIMESTAMP)
+        """, (pid,))
+        conn.commit()
+
+        return jsonify({"message": "Password reset successful! Please sign in with your new password."}), 200
+    except ValueError as ve:
+        return jsonify({"error": str(ve)}), 400
+    except Exception as e:
+        if conn: conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         if cursor: cursor.close()
@@ -268,9 +372,20 @@ def get_current_user():
     if not session.get("logged_in"): return jsonify({"logged_in": False}), 401
     conn = get_connection(); cursor = conn.cursor()
     try:
-        cursor.execute("SELECT COUNT(*) FROM ELECTION WHERE ORGANIZER_PID = :1", (session.get("pid"),))
+        cursor.execute("SELECT COUNT(*) FROM ELECTION WHERE ORGANIZER_PID = :1 AND STATUS != 'ARCHIVED'", (session.get("pid"),))
         is_organizer = cursor.fetchone()[0] > 0
-        return jsonify({"logged_in": True, "csrf_token": session.get("csrf_token"), "user": {"pid": session.get("pid"), "is_organizer": is_organizer, "is_super_admin": session.get("is_super_admin", False)}}), 200
+        return jsonify({
+            "logged_in": True,
+            "csrf_token": session.get("csrf_token"),
+            "user": {
+                "pid": session.get("pid"),
+                "first_name": session.get("first_name"),
+                "last_name": session.get("last_name"),
+                "email": session.get("email"),
+                "is_organizer": is_organizer,
+                "is_super_admin": session.get("is_super_admin", False)
+            }
+        }), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -653,7 +768,6 @@ def cast_vote(election_id):
         if cursor.rowcount == 0:
             cursor.execute("SELECT STATUS FROM VOTER_POST_STATUS WHERE ELECTION_ID = :1 AND POSITION_ID = :2 AND PID = :3", (election_id, pos_id, pid))
             if cursor.fetchone():
-                # FIX: Explicitly logging ELECTION_ID so the PDF export function can find it natively
                 cursor.execute("""
                     INSERT INTO FRAUD_LOGS (PID, ELECTION_ID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
                     VALUES (:1, :2, 'DOUBLE_VOTE_ATTEMPT', :3, SYSTIMESTAMP)
@@ -664,7 +778,6 @@ def cast_vote(election_id):
             cursor.execute("SELECT STATUS FROM EVENT_PARTICIPANTS WHERE ELECTION_ID = :1 AND PID = :2", (election_id, pid))
             v_status = cursor.fetchone()
             if not v_status or v_status[0] != 'ELIGIBLE':
-                # FIX: Explicitly logging ELECTION_ID here as well
                 cursor.execute("""
                     INSERT INTO FRAUD_LOGS (PID, ELECTION_ID, FRAUD_TYPE, DESCRIPTION, DETECTED_AT)
                     VALUES (:1, :2, 'UNAUTHORIZED_BALLOT', :3, SYSTIMESTAMP)
@@ -702,7 +815,7 @@ def get_results(election_id):
             LEFT JOIN POLITICAL_PARTY PP ON EP.PARTY_ID = PP.PARTY_ID
             WHERE C.ELECTION_ID = :1 AND C.STATUS = 'ACTIVE' ORDER BY POS.DISPLAY_ORDER, VOTE_COUNT DESC
         """, (election_id,))
-        results = [{"candidate_name": f"{r[1]} ({r[4]})", "position": r[2], "total_votes": int(r[3])} for r in cursor.fetchall()]
+        results = [{"candidate_id": r[0], "candidate_name": f"{r[1]} ({r[4]})", "position": r[2], "total_votes": int(r[3])} for r in cursor.fetchall()]
         return jsonify({"results": results}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -777,8 +890,6 @@ def export_fraud_log(election_id):
         
         search_title = f"%{elec[0]}%"
 
-        # FIX: The query now checks explicitly for the ELECTION_ID natively, and uses 
-        # the LIKE operator as a fallback to sweep up any older NULL records.
         cursor.execute("""
             SELECT DETECTED_AT, FRAUD_TYPE, DESCRIPTION, IP_ADDRESS 
             FROM FRAUD_LOGS 
@@ -788,7 +899,6 @@ def export_fraud_log(election_id):
         """, (election_id, search_title))
         fraud_logs = cursor.fetchall()
 
-        # FIX: Intelligent pattern matching for Audit Logs to capture all dynamic formats
         search_id_end = f"%Election {election_id}"
         search_id_space = f"%Election {election_id} %"
         cursor.execute("""
@@ -819,7 +929,6 @@ def export_fraud_log(election_id):
         story.append(Paragraph(f"Generated On: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", body_style))
         story.append(Spacer(1, 0.25 * inch))
         
-        # Section 1: Audit Trail
         story.append(Paragraph("Part 1: Administrative Audit Trail", subtitle_style))
         audit_table_data = [[
             Paragraph("<b>Timestamp</b>", body_style), 
@@ -854,7 +963,6 @@ def export_fraud_log(election_id):
         ]))
         story.append(audit_table)
 
-        # Section 2: Fraud Log
         story.append(Paragraph("Part 2: Active Fraud Alerts", subtitle_style))
         fraud_table_data = [[
             Paragraph("<b>Timestamp</b>", body_style), 
@@ -1184,7 +1292,7 @@ def get_fraud_logs():
                 JOIN UACCOUNT U ON F.PID = U.PID 
                 WHERE F.PID IN (
                     SELECT PID FROM EVENT_PARTICIPANTS WHERE ELECTION_ID IN (
-                        SELECT ELECTION_ID FROM ELECTION WHERE ORGANIZER_PID = :1
+                        SELECT ELECTION_ID FROM ELECTION WHERE ORGANIZER_PID = :1 AND STATUS != 'ARCHIVED'
                     )
                 )
                 ORDER BY F.FRAUD_ID DESC
