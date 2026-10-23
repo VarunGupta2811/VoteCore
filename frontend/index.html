@@ -7,13 +7,22 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body class="auth-page" onload="checkLoginStatus()">
+    <div class="auth-atmosphere" aria-hidden="true"><span></span><span></span><span></span></div>
     <main class="container app-shell auth-shell">
+        <nav class="auth-nav" aria-label="VoteCore landing navigation">
+            <a class="auth-nav-brand" href="#loginForm"><span>VOTE</span>CORE</a>
+            <div class="auth-nav-links"><a href="#loginForm" onclick="backToLogin()">Sign in</a><a href="#registerForm" onclick="toggleForms()">Register</a></div>
+            <span class="auth-nav-status"><i></i> System protected</span>
+        </nav>
+        <div class="auth-layout">
         <header class="brand-hero">
-            <p class="eyebrow"><span class="live-dot"></span> Secure civic infrastructure</p>
+            <p class="eyebrow auth-reveal auth-reveal-1"><span class="live-dot"></span> Secure civic infrastructure</p>
             <h1><span>Vote</span>Core</h1>
             <p class="hero-copy">A protected digital ballot box for organizations that take every vote seriously.</p>
             <div class="trust-row"><span>Encrypted ballots</span><span>Identity verified</span><span>Auditable results</span></div>
+            <div id="authProof" class="auth-proof-strip"><span>01</span><p>Identity checked. Ballots protected. Results verifiable.</p></div>
         </header>
+        <div class="auth-form-stack">
         <section id="loginForm" class="card auth-card">
             <div class="card-kicker">Member access</div>
             <h2>Welcome back</h2>
@@ -23,7 +32,6 @@
             <button class="btn btn-primary btn-full" onclick="login()">Secure sign in <span>→</span></button>
             <p id="message" class="message"></p>
             <button class="text-action" type="button" onclick="showForgotPassword()">Forgot your password? Reset it <span>→</span></button>
-            <button class="text-action" type="button" onclick="toggleForms()">New to VoteCore? Create your account <span>→</span></button>
         </section>
         <section id="otpForm" class="card auth-card otp-card" style="display: none;">
             <div class="card-kicker">Two-factor verification</div><h2>Confirm it’s you</h2>
@@ -131,6 +139,8 @@
             <p id="regMessage" class="message" style="display: none;"></p>
             <button class="text-action" type="button" onclick="toggleForms()">Already enrolled? Sign in <span>→</span></button>
         </section>
+        </div>
+        </div>
     </main>
     <script src="script.js?v=20260906b"></script>
 </body>
