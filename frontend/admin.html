@@ -131,7 +131,18 @@
             </section>
 
             <section class="card" style="grid-column: 1 / -1;">
-                <p class="card-kicker">05 / Accountability</p>
+                <p class="card-kicker">05 / Live analytics</p>
+                <h2>Voter turnout</h2>
+                <p class="card-intro">Compare each post’s approved voter roll with ballots cast. Counts refresh automatically.</p>
+                <div class="inline-form">
+                    <select id="turnoutElectionId" style="flex: 1;"><option value="">Loading...</option></select>
+                    <button class="btn btn-primary" onclick="refreshOrganizerTurnout()">Refresh turnout</button>
+                </div>
+                <div id="organizerTurnoutContainer" class="data-panel" style="margin-top: 15px;"><p>Select an election to view turnout.</p></div>
+            </section>
+
+            <section class="card" style="grid-column: 1 / -1;">
+                <p class="card-kicker">06 / Accountability</p>
                 <h2>Election security logs</h2>
                 <div class="button-row">
                     <button class="btn btn-primary" onclick="loadAuditLogs('orgLogsContainer')">My Audit Logs</button>

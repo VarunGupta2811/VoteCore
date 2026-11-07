@@ -49,21 +49,25 @@ Integrity rules are enforced both in the Flask API and in Oracle itself (foreign
 ### 🎫 Nominations and campaigns
 - **Party registration per election**, with the founder automatically nominated for President.
 - **Party membership and ticket assignment** — leaders assign members to ballot positions with a manifesto.
-- **Organizer scrutiny** — parties and candidate tickets only reach the ballot after organizer approval.
-- **Independent candidates** supported (`ELECTION_PARTY_ID` is nullable).
+- **Organizer scrutiny** — organizers can approve or reject pending candidates and withdraw approved candidates during `NOMINATION`.
+- **Independent nominations** — eligible voters can nominate themselves for an open position without joining a party.
+- **Candidate withdrawal** — candidates can withdraw their own approved nomination during `NOMINATION`.
 
 ### 🗳️ Voting
 - **One vote per voter per position**, enforced by an atomic status update on `VOTER_POST_STATUS` (`ELIGIBLE` → `VOTED`).
 - **Anonymous ballots** — the `VOTE` table holds election, position and candidate only.
 - **Voter roll whitelisting** — voters apply per election and the organizer approves them.
+- **Signed participation receipts** — a receipt can be verified against a recorded ballot without revealing the voter's selection.
+- **Live turnout analytics** — per-position progress compares the eligible voter roll with ballots cast and refreshes every 15 seconds.
 
 ### 📜 Accountability
 - **Audit log** (`AUDIT_LOGS`) — administrative actions are written by the API and by database triggers on user and election changes.
 - **Fraud log** (`FRAUD_LOGS`) — double-vote attempts (`DOUBLE_VOTE_ATTEMPT`) and ballots from unapproved voters (`UNAUTHORIZED_BALLOT`) are recorded. The API exposes no route that edits or deletes audit or fraud records.
-- **PDF security ledger** — the Super Admin can export a per-election fraud/security report generated with ReportLab.
+- **PDF reports** — the Super Admin can export the fraud/security ledger; completed elections also publish an official results PDF with aggregate tallies and turnout.
 
 ### 🎨 Interface
-- **"Civic Ledger" design system** — dark indigo surfaces with lilac "ballot paper" cards, teal for verified/active states and crimson for fraud alerts. Fraunces for headings, IBM Plex Sans for body text and IBM Plex Mono for ledger-style data. Mobile-first layout using Flexbox and Grid.
+- **React + Vite experience** — animated React routes, election cards and dialogs with Framer Motion, responsive layouts, and reduced-motion support.
+- **Legacy static interface** — the existing HTML, CSS and JavaScript pages remain available during the migration.
 
 ---
 
@@ -71,8 +75,9 @@ Integrity rules are enforced both in the Flask API and in Oracle itself (foreign
 
 ```mermaid
 flowchart LR
-    subgraph Client["Frontend (static files)"]
-        UI["HTML · CSS · Vanilla JS"]
+    subgraph Client["Frontend"]
+        UI["React · Vite · Framer Motion"]
+        Legacy["Legacy HTML · CSS · JS"]
     end
     subgraph Server["Backend"]
         API["Flask REST API<br/>app.py"]
@@ -82,12 +87,13 @@ flowchart LR
     DB[("Oracle Database<br/>tables · view · triggers")]
 
     UI -- "fetch + session cookie<br/>+ X-CSRF-Token" --> API
+    Legacy -- "fetch + session cookie<br/>+ X-CSRF-Token" --> API
     API -- "python-oracledb<br/>bind variables" --> DB
     API --> MAIL
     API --> PDF
 ```
 
-The frontend is a set of static pages that call the API at the `API_URL` defined in `script.js`. The Flask app serves JSON and PDFs only; it does not serve the HTML files.
+The repository includes the existing static frontend and a React + Vite frontend in `frontend/react-app`. Both call the Flask API; Flask serves JSON and PDFs, not the frontend HTML. The static app remains available while the React migration is validated.
 
 ### Election lifecycle
 
@@ -276,7 +282,19 @@ python app.py
 
 On Windows you can use `start-server.bat` instead. The API listens on `http://127.0.0.1:5000`.
 
-### 7. Serve the frontend
+### 7. Run a frontend
+
+To run the React + Vite app, use Node.js 20.19+ or 22.12+:
+
+```bash
+cd frontend/react-app
+npm ci
+npm run dev
+```
+
+Open **http://127.0.0.1:5173**. The Vite origin is allowed by the Flask CORS configuration. To point the app to a different API origin, set `VITE_API_URL` before starting Vite.
+
+The existing static frontend can still be served independently:
 
 In a second terminal, serve the `frontend/` folder from an origin the backend allows (`127.0.0.1` or `localhost`, port `5500` or `5501`):
 
@@ -402,10 +420,15 @@ Base URL: `http://127.0.0.1:5000`. All `/api/*` routes except the first four bel
 | `POST` | `/api/elections/<id>/register-party` | Register a party (`party_name`, `manifesto`) |
 | `POST` | `/api/elections/<id>/parties/<party_id>/join` | Join a party |
 | `GET` | `/api/elections/<id>/my-party-members` | Members of the caller's party |
+| `POST` | `/api/elections/<id>/nominate-independent` | Self-nominate (`position_id`, `manifesto`) during `NOMINATION` |
 | `POST` | `/api/elections/<id>/assign-candidate` | Leader assigns a ticket (`member_pid`, `position`, `manifesto`) |
 | `GET` | `/api/elections/<id>/candidates` | Approved candidates |
+| `POST` | `/api/elections/<id>/candidates/<candidate_id>/withdraw` | Candidate withdraws during `NOMINATION` |
 | `POST` | `/api/elections/<id>/vote` | Cast a vote (`candidate_id`) |
+| `GET` | `/api/elections/<id>/turnout` | Per-position voter-roll and ballot counts |
+| `GET` | `/api/elections/<id>/receipt/verify?token=<receipt>` | Verify a signed participation receipt |
 | `GET` | `/api/elections/<id>/results` | Results, only when `COMPLETED` |
+| `GET` | `/api/elections/<id>/results/export` | Download the official results PDF, only when `COMPLETED` |
 
 ### Administration
 
@@ -413,6 +436,7 @@ Base URL: `http://127.0.0.1:5000`. All `/api/*` routes except the first four bel
 |---|---|---|---|
 | `GET` | `/api/admin/host-requests` | Super Admin | List hosting applications |
 | `POST` | `/api/admin/host-requests/<req_id>/approve` | Super Admin | Approve and provision |
+| `POST` | `/api/admin/host-requests/<req_id>/reject` | Super Admin | Reject a hosting request |
 | `POST` | `/api/admin/elections` | Super Admin | Create an election directly (`orgid`, `title`, `description`) |
 | `DELETE` | `/api/admin/elections/<id>` | Super Admin | Archive an election |
 | `GET` | `/api/admin/elections/<id>/export-fraud-log` | Super Admin | Download the PDF ledger |
@@ -421,8 +445,12 @@ Base URL: `http://127.0.0.1:5000`. All `/api/*` routes except the first four bel
 | `POST` | `/api/admin/elections/<id>/positions` | Organizer | Add a ballot position (`title`) |
 | `GET` | `/api/admin/elections/<id>/pending-voters` | Organizer | Pending voter applications |
 | `POST` | `/api/admin/elections/<id>/approve-voter` | Organizer | Approve a voter (`pid`) |
+| `POST` | `/api/admin/elections/<id>/reject-voter` | Organizer | Reject a voter-roll application (`pid`) |
 | `GET` | `/api/admin/elections/<id>/pending-parties` | Organizer | Pending parties |
 | `POST` | `/api/admin/parties/<party_id>/approve` | Organizer | Approve a party |
+| `POST` | `/api/admin/parties/<party_id>/reject` | Organizer | Reject a party and its pending tickets |
+| `GET` | `/api/admin/elections/<id>/pending-candidates` | Organizer | Review pending and approved candidates |
+| `POST` | `/api/admin/candidates/<candidate_id>/status` | Organizer | Reject a pending candidate or withdraw an approved candidate during `NOMINATION` |
 | `GET` | `/api/admin/elections/<id>/pending-candidates` | Organizer | Pending tickets |
 | `POST` | `/api/admin/candidates/<candidate_id>/approve` | Organizer | Approve a ticket |
 | `GET` | `/api/admin/audit-logs` | Super Admin / Organizer | Global logs for the admin, own logs for an organizer |

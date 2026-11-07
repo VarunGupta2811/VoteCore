@@ -8,3 +8,7 @@ __pycache__/
 # Virtual Environments (if you used one)
 venv/
 env/
+
+# React frontend dependencies and build output
+frontend/react-app/node_modules/
+frontend/react-app/dist/

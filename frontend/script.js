@@ -1,6 +1,5 @@
 const API_URL = "http://127.0.0.1:5000";
 
-let currentAuthAction = 'login';
 let pendingRegEmail = '';
 let myElectionsCache = [];
 
@@ -201,6 +200,101 @@ function escapeHtml(value) {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+function getStoredVoteReceipts(electionId) {
+    try {
+        const receipts = JSON.parse(localStorage.getItem(`voteReceipts:${electionId}`) || "[]");
+        return Array.isArray(receipts) ? receipts.filter(item => item && typeof item.receipt === "string") : [];
+    } catch (error) {
+        return [];
+    }
+}
+
+function saveVoteReceipt(electionId, receipt) {
+    const receipts = getStoredVoteReceipts(electionId);
+    receipts.unshift({ receipt: receipt, received_at: new Date().toISOString() });
+    try {
+        localStorage.setItem(`voteReceipts:${electionId}`, JSON.stringify(receipts.slice(0, 20)));
+    } catch (error) {
+        console.error("Could not save the vote receipt in this browser.", error);
+    }
+}
+
+function renderVoteReceipts(electionId) {
+    const receipts = getStoredVoteReceipts(electionId);
+    if (receipts.length === 0) return "";
+    return `<section class="vote-receipts">
+        <h3>Your participation receipts</h3>
+        <p>These signed codes confirm that ballots were recorded; they do not contain your selections.</p>
+        ${receipts.map(item => `<div class="vote-receipt" data-election-id="${escapeHtml(electionId)}">
+            <code>${escapeHtml(item.receipt)}</code>
+            <div class="button-row">
+                <button class="btn btn-secondary" type="button" data-receipt="${escapeHtml(item.receipt)}" onclick="copyVoteReceipt(this)">Copy receipt</button>
+                <button class="btn btn-primary" type="button" data-receipt="${escapeHtml(item.receipt)}" onclick="verifyVoteReceipt(this)">Verify receipt</button>
+            </div>
+            <p class="receipt-verification" aria-live="polite"></p>
+        </div>`).join("")}
+    </section>`;
+}
+
+async function copyVoteReceipt(button) {
+    try {
+        await navigator.clipboard.writeText(button.dataset.receipt);
+        button.innerText = "Copied";
+    } catch (error) {
+        alert("Clipboard access is unavailable. Select and copy the receipt displayed on the page.");
+    }
+}
+
+async function verifyVoteReceipt(button) {
+    const receiptElement = button.closest(".vote-receipt");
+    const message = receiptElement.querySelector(".receipt-verification");
+    message.innerText = "Verifying receipt...";
+    try {
+        const electionId = receiptElement.dataset.electionId;
+        const token = encodeURIComponent(button.dataset.receipt);
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/receipt/verify?token=${token}`, { credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Receipt verification failed.");
+        message.innerText = data.valid
+            ? "Verified: this ballot was recorded. The receipt does not disclose the selection."
+            : "This receipt is invalid or does not match a recorded ballot.";
+    } catch (error) {
+        message.innerText = error.message || "Could not verify the receipt.";
+    }
+}
+
+async function refreshTurnout(electionId, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !electionId) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/turnout`, { credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Turnout data could not be loaded.");
+        if (!data.positions || data.positions.length === 0) {
+            container.innerHTML = "<p>No ballot positions have been configured.</p>";
+            return;
+        }
+        container.innerHTML = data.positions.map(position => {
+            const percent = Math.max(0, Math.min(100, Number(position.turnout_percent) || 0));
+            return `<div class="turnout-row">
+                <div class="turnout-label"><strong>${escapeHtml(position.position)}</strong>
+                    <span>${position.ballots_cast} / ${position.eligible_voters} ballots · ${percent}%</span>
+                </div>
+                <div class="turnout-track" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
+                    <span style="width: ${percent}%"></span>
+                </div>
+            </div>`;
+        }).join("");
+    } catch (error) {
+        container.innerText = `Turnout analytics unavailable: ${error.message || "connection error."}`;
+    }
+}
+
+function startTurnoutPolling(callback) {
+    if (window.turnoutPollingTimer) clearInterval(window.turnoutPollingTimer);
+    window.turnoutPollingTimer = setInterval(callback, 15000);
+}
+
 async function refreshUserFromBackend() {
     try {
         const response = await fetch(`${API_URL}/api/auth/me`, { method: "GET", credentials: "include" });
@@ -261,7 +355,6 @@ async function registerUser() {
         if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
         if (data.requires_otp) {
-            currentAuthAction = 'register';
             pendingRegEmail = data.email;
             document.getElementById("registerForm").style.display = "none";
             document.getElementById("otpForm").style.display = "block";
@@ -288,14 +381,13 @@ async function login() {
         const data = await response.json();
         if (!response.ok) { msg.style.color = "#e74c3c"; msg.innerText = data.error; return; }
 
-        if (data.requires_otp) {
-            currentAuthAction = 'login';
-            document.getElementById("loginForm").style.display = "none";
-            document.getElementById("otpForm").style.display = "block";
-            const otpMsg = document.getElementById("otpMessage");
-            otpMsg.style.display = "block"; otpMsg.style.backgroundColor = "#3498db";
-            otpMsg.style.color = "white"; otpMsg.innerText = "OTP Sent to email!";
-        }
+        if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
+        if (data.user) saveCurrentUser(data.user);
+        msg.style.color = "#2ecc71";
+        msg.innerText = "Login successful! Redirecting...";
+        setTimeout(() => {
+            window.location.href = (data.user && (data.user.is_super_admin || data.user.is_organizer)) ? "admin.html" : "dashboard.html";
+        }, 1000);
     } catch (e) { msg.style.color = "#e74c3c"; msg.innerText = "Backend is offline."; }
 }
 
@@ -306,42 +398,23 @@ async function verifyOTP() {
     if (!otpCode || otpCode.length !== 6) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Enter a valid 6-digit OTP."; return; }
     msg.style.backgroundColor = "#f39c12"; msg.innerText = "Verifying...";
 
-    if (currentAuthAction === 'register') {
-        try {
-            const response = await fetch(`${API_URL}/api/auth/register-verify`, {
-                method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: pendingRegEmail, otp: otpCode })
-            });
-            const data = await response.json();
-            if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
+    try {
+        const response = await fetch(`${API_URL}/api/auth/register-verify`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: pendingRegEmail, otp: otpCode })
+        });
+        const data = await response.json();
+        if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
 
-            msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Registration verified! Redirecting to login...";
-            setTimeout(() => { 
-                document.getElementById("otpForm").style.display = "none";
-                document.getElementById("loginForm").style.display = "block";
-                document.getElementById("email").value = pendingRegEmail;
-                pendingRegEmail = '';
-                msg.style.display = "none";
-            }, 2000);
-        } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
-    } else {
-        try {
-            const response = await fetch(`${API_URL}/api/auth/verify-otp`, {
-                method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ otp: otpCode })
-            });
-            const data = await response.json();
-            if (!response.ok) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = data.error; return; }
-
-            if (data.csrf_token) localStorage.setItem("votingCsrfToken", data.csrf_token);
-            if (data.user) saveCurrentUser(data.user);
-            msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Login Verified! Redirecting...";
-            
-            setTimeout(() => {
-                window.location.href = (data.user && (data.user.is_super_admin || data.user.is_organizer)) ? "admin.html" : "dashboard.html";
-            }, 1000);
-        } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
-    }
+        msg.style.backgroundColor = "#2ecc71"; msg.innerText = "Registration verified! Redirecting to login...";
+        setTimeout(() => {
+            document.getElementById("otpForm").style.display = "none";
+            document.getElementById("loginForm").style.display = "block";
+            document.getElementById("email").value = pendingRegEmail;
+            pendingRegEmail = '';
+            msg.style.display = "none";
+        }, 2000);
+    } catch (e) { msg.style.backgroundColor = "#e74c3c"; msg.innerText = "Backend is offline."; }
 }
 
 async function logout() {
@@ -518,7 +591,9 @@ async function loadElection() {
             document.getElementById("electionStatus").innerText = `Phase: ${electionInfo.status || ""}`;
         }
 
-        let html = `<div class="content-divider"></div>`;
+        let html = `<div class="content-divider"></div>
+            <section id="electionTurnout" class="turnout-panel"><p>Loading live voter turnout...</p></section>
+            ${renderVoteReceipts(electionId)}`;
 
         const isSuperAdmin = user.is_super_admin;
         const isOrganizer = electionInfo.organizer_pid === user.pid;
@@ -526,6 +601,7 @@ async function loadElection() {
         const isEligible = electionInfo.voter_status === "ELIGIBLE";
         const isNominationPhase = electionInfo.status === "NOMINATION";
         const isActivePhase = electionInfo.status === "ACTIVE";
+        const voterApplicationsClosed = ["COMPLETED", "ARCHIVED"].includes(electionInfo.status);
 
         if (!electionInfo.has_organizer) {
             html += `<div class="section-heading compact" style="text-align: center; padding: 2rem 0;">
@@ -538,7 +614,16 @@ async function loadElection() {
 
         if (canParticipate) {
             if (!electionInfo.voter_status) {
-                html += `<div class="role-banner" style="background: linear-gradient(110deg, #f39c12, #e67e22); border-color: #f1c40f; margin-bottom: 20px;">
+                if (voterApplicationsClosed) {
+                    html += `<div class="role-banner" style="background: #34495e; border-color: #2c3e50; margin-bottom: 20px;">
+                                <span>🔒</span>
+                                <div>
+                                    <h2 style="color: #FFF; margin-bottom: 5px;">Voter Applications Closed</h2>
+                                    <p style="color: #FFF;">This election has ended and voter roll applications are no longer accepted.</p>
+                                </div>
+                             </div>`;
+                } else {
+                    html += `<div class="role-banner" style="background: linear-gradient(110deg, #f39c12, #e67e22); border-color: #f1c40f; margin-bottom: 20px;">
                             <span>📝</span>
                             <div>
                                 <h2 style="color: #FFF; margin-bottom: 5px;">Voter Registration Required</h2>
@@ -546,6 +631,7 @@ async function loadElection() {
                                 <button class="btn btn-neutral" onclick="registerForVoterRoll(${electionId})" style="margin-top: 10px; color: #333;">Apply for Voter Roll</button>
                             </div>
                          </div>`;
+                }
             } else if (electionInfo.voter_status === 'PENDING') {
                 html += `<div class="role-banner" style="background: #34495e; border-color: #2c3e50; margin-bottom: 20px;">
                             <span>⏳</span>
@@ -596,6 +682,19 @@ async function loadElection() {
             }
         }
         html += `</div>`;
+
+        if (canParticipate && isEligible && isNominationPhase) {
+            html += `<section class="independent-nomination-panel">
+                <p class="card-kicker">Independent candidate</p>
+                <h3>Run without a party</h3>
+                <p>Submit your own nomination for organizer review.</p>
+                <label for="independentPositionSelect">Ballot position</label>
+                <select id="independentPositionSelect"><option value="">Loading positions...</option></select>
+                <label for="independentManifesto">Manifesto</label>
+                <textarea id="independentManifesto" maxlength="1500" rows="3" placeholder="Share your manifesto (optional)"></textarea>
+                <button class="btn btn-violet" type="button" onclick="nominateIndependentCandidate(${electionId})">Submit independent nomination</button>
+            </section>`;
+        }
 
         if (canParticipate && isEligible && isNominationPhase && amIPartyLeader) {
             html += `<div class="ticket-delegation-panel">
@@ -653,6 +752,9 @@ async function loadElection() {
                     if (canParticipate && isEligible && isActivePhase) {
                         html += `<button class="vote-button" onclick="castVote(${electionId}, ${candidate.candidate_id})">Vote for ${escapeHtml(candidate.name)}</button>`;
                     }
+                    if (canParticipate && isEligible && isNominationPhase && candidate.candidate_pid === user.pid) {
+                        html += `<button class="btn btn-danger" onclick="withdrawOwnCandidate(${electionId}, ${candidate.candidate_id})">Withdraw my nomination</button>`;
+                    }
                     html += `</div>`;
                 });
                 html += `</div>`;
@@ -665,6 +767,9 @@ async function loadElection() {
             fetchPartyMembersForDelegation(electionId);
             fetchPositionsForDelegation(electionId);
         }
+        if (canParticipate && isEligible && isNominationPhase) fetchPositionsForIndependent(electionId);
+        refreshTurnout(electionId, "electionTurnout");
+        startTurnoutPolling(() => refreshTurnout(electionId, "electionTurnout"));
 
     } catch (error) { candidatesElement.innerText = "Cannot connect to backend."; }
 }
@@ -741,6 +846,58 @@ async function fetchPositionsForDelegation(electionId) {
     } catch (e) { select.innerHTML = `<option value="">Error loading positions</option>`; }
 }
 
+async function fetchPositionsForIndependent(electionId) {
+    const select = document.getElementById("independentPositionSelect");
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/positions`, { credentials: "include" });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load ballot positions.");
+        if (data.positions && data.positions.length > 0) {
+            select.innerHTML = `<option value="">-- Choose a Position --</option>` +
+                data.positions.map(position => `<option value="${position.position_id}">${escapeHtml(position.title)}</option>`).join("");
+        } else {
+            select.innerHTML = `<option value="">No open ballot positions</option>`;
+        }
+    } catch (error) {
+        select.innerHTML = `<option value="">Error loading positions</option>`;
+    }
+}
+
+async function nominateIndependentCandidate(electionId) {
+    const positionId = document.getElementById("independentPositionSelect").value;
+    const manifesto = document.getElementById("independentManifesto").value.trim();
+    if (!positionId) { alert("Please select a ballot position."); return; }
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/nominate-independent`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ position_id: Number(positionId), manifesto: manifesto })
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        if (response.ok) loadElection();
+    } catch (error) {
+        alert("Cannot connect to backend.");
+    }
+}
+
+async function withdrawOwnCandidate(electionId, candidateId) {
+    if (!confirm("Withdraw your nomination from this election?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/elections/${electionId}/candidates/${candidateId}/withdraw`, {
+            method: "POST",
+            credentials: "include"
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        if (response.ok) loadElection();
+    } catch (error) {
+        alert("Cannot connect to backend.");
+    }
+}
+
 async function assignCandidate(electionId) {
     const memberPid = document.getElementById("delegateMemberSelect").value;
     const position = document.getElementById("delegatePositionSelect").value;
@@ -781,7 +938,8 @@ async function castVote(electionId, candidateId) {
         const data = await response.json();
         
         if (response.ok) {
-            alert(data.message || "Ballot cryptographically sealed and cast!");
+            saveVoteReceipt(electionId, data.receipt);
+            alert(`${data.message || "Ballot cryptographically sealed and cast!"}\n\n${data.receipt_notice || ""}\nReceipt: ${data.receipt}`);
             loadElection(); 
             return;
         }
@@ -813,6 +971,8 @@ async function loadResults() {
         const response = await fetch(`${API_URL}/api/elections/${electionId}/results`, { method: "GET", credentials: "include" });
         const data = await response.json();
         if (!response.ok) { resultsElement.innerText = data.error || "Results are not available."; return; }
+        const exportButton = document.getElementById("exportResultsButton");
+        if (exportButton && data.status === "COMPLETED") exportButton.style.display = "inline-flex";
 
         const results = data.results || [];
         if (results.length === 0) { resultsElement.innerText = "No results available yet."; return; }
@@ -859,6 +1019,15 @@ async function loadResults() {
     } catch (error) { resultsElement.innerText = "Cannot connect to backend."; }
 }
 
+function exportOfficialResults() {
+    const electionId = new URLSearchParams(window.location.search).get("id");
+    if (!electionId) {
+        alert("Election ID is missing.");
+        return;
+    }
+    window.location.href = `${API_URL}/api/elections/${electionId}/results/export`;
+}
+
 // ============================================================
 // ADMIN AND ORGANIZER SCRUTINY PANELS
 // ============================================================
@@ -897,15 +1066,17 @@ async function loadHostRequests() {
         if (data.host_requests && data.host_requests.length > 0) {
             let html = "";
             data.host_requests.forEach(req => {
-                html += `<div style="padding: 12px; border-bottom: 1px solid #ddd; background: #fffdfaa3; margin-bottom: 8px; border-radius: 4px;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                        <div>
-                            <strong style="color:#0B1B33; font-size:15px;">${escapeHtml(req.title)}</strong><br>
-                            <small style="color:#f39c12; font-weight:bold;">${escapeHtml(req.org_name)}</small><br>
-                            <small style="color:#5B6478;">Requester: ${escapeHtml(req.user_name)} (PID: ${req.pid})</small>
-                            <p style="margin:5px 0 0 0; font-size:13px; color:#333;"><i>${escapeHtml(req.description || "No description")}</i></p>
-                        </div>
-                        <button onclick="approveHostRequest(${req.request_id})" style="background-color: #0B7A5F; padding: 6px 12px; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight:bold;">Provision</button>
+                html += `<div class="hosting-request-card">
+                    <div class="hosting-request-content">
+                        <p class="hosting-request-label">HOSTING REQUEST</p>
+                        <h3>${escapeHtml(req.title)}</h3>
+                        <p class="hosting-request-organization">${escapeHtml(req.org_name)}</p>
+                        <div class="hosting-request-meta"><strong>Requester: ${escapeHtml(req.user_name)}</strong><span>PID: ${req.pid}</span></div>
+                        <p class="hosting-request-description">${escapeHtml(req.description || "No description provided.")}</p>
+                    </div>
+                    <div class="hosting-request-actions">
+                        <button class="btn btn-primary hosting-request-action" onclick="approveHostRequest(${req.request_id})">Provision</button>
+                        <button class="btn btn-danger hosting-request-action" onclick="rejectHostRequest(${req.request_id})">Reject</button>
                     </div>
                 </div>`;
             });
@@ -929,6 +1100,21 @@ async function approveHostRequest(reqId) {
     } catch (e) { alert("Connection error."); }
 }
 
+async function rejectHostRequest(reqId) {
+    if (!confirm("Reject this hosting request?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/host-requests/${reqId}/reject`, {
+            method: "POST",
+            credentials: "include"
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        if (response.ok) loadHostRequests();
+    } catch (error) {
+        alert("Connection error.");
+    }
+}
+
 async function loadSuperAdminElections() {
     const select = document.getElementById("exportElectionId");
     if (!select) return;
@@ -949,6 +1135,7 @@ async function loadOrganizerElections() {
     const posSelect = document.getElementById("positionElectionId");
     const scrutinySelect = document.getElementById("scrutinyElectionId");
     const voterSelect = document.getElementById("voterRollElectionId");
+    const turnoutSelect = document.getElementById("turnoutElectionId");
 
     try {
         const res = await fetch(`${API_URL}/api/admin/my-elections`, { credentials: "include" });
@@ -966,13 +1153,26 @@ async function loadOrganizerElections() {
             }
             if(posSelect) posSelect.innerHTML = optionsHTML;
             if(voterSelect) voterSelect.innerHTML = optionsHTML;
+            if(turnoutSelect) {
+                turnoutSelect.innerHTML = optionsHTML;
+                turnoutSelect.onchange = refreshOrganizerTurnout;
+            }
             if(scrutinySelect) {
                 scrutinySelect.innerHTML = optionsHTML;
                 if(data.my_elections.length > 0) fetchPendingCandidates(); 
             }
-            if(data.my_elections.length > 0) fetchPendingVoters();
+            if(data.my_elections.length > 0) {
+                fetchPendingVoters();
+                refreshOrganizerTurnout();
+                startTurnoutPolling(refreshOrganizerTurnout);
+            }
         }
     } catch (e) {}
+}
+
+function refreshOrganizerTurnout() {
+    const electionId = document.getElementById("turnoutElectionId");
+    if (electionId) refreshTurnout(electionId.value, "organizerTurnoutContainer");
 }
 
 function syncPhaseDropdown() {
@@ -1039,7 +1239,10 @@ async function fetchPendingVoters() {
                         <strong>${escapeHtml(v.name)}</strong> (PID: ${v.pid})<br>
                         <small>${escapeHtml(v.email)}</small>
                     </div>
-                    <button onclick="approveVoter(${electionId}, ${v.pid})" style="background-color: #2ecc71; padding: 5px 15px; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve</button>
+                    <div class="button-row">
+                        <button onclick="approveVoter(${electionId}, ${v.pid})" style="background-color: #2ecc71; padding: 5px 15px; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve</button>
+                        <button onclick="rejectVoter(${electionId}, ${v.pid})" style="background-color: #c0392b; padding: 5px 15px; width: auto; color: white; border: none; border-radius: 4px; cursor: pointer;">Reject</button>
+                    </div>
                 </div>`;
             });
             container.innerHTML = html;
@@ -1062,6 +1265,23 @@ async function approveVoter(electionId, pid) {
     } catch (e) { alert("Connection error."); }
 }
 
+async function rejectVoter(electionId, pid) {
+    if (!confirm("Reject this voter-roll application?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/elections/${electionId}/reject-voter`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pid: Number(pid) })
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        fetchPendingVoters();
+    } catch (error) {
+        alert("Connection error.");
+    }
+}
+
 async function fetchPendingCandidates() {
     const electionId = document.getElementById("scrutinyElectionId").value;
     const container = document.getElementById("scrutinyContainer");
@@ -1080,17 +1300,27 @@ async function fetchPendingCandidates() {
             partyData.pending_parties.forEach(p => {
                 html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; background: #fffdfaa3;">
                     <div><strong>${escapeHtml(p.party_name)}</strong><br><small>Leader: ${escapeHtml(p.leader_name)}</small></div>
-                    <button onclick="approveElectionParty(${p.party_id})" style="background-color: #f39c12; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve Party</button>
+                    <div class="button-row">
+                        <button onclick="approveElectionParty(${p.party_id})" style="background-color: #f39c12; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve Party</button>
+                        <button onclick="rejectElectionParty(${p.party_id})" style="background-color: #c0392b; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Reject</button>
+                    </div>
                 </div>`;
             });
         }
         
         if (candData.pending_candidates && candData.pending_candidates.length > 0) {
-            html += `<h4 style="margin: 15px 0 10px 0; color: #2ecc71; font-family: monospace;">PENDING TICKETS</h4>`;
+            html += `<h4 style="margin: 15px 0 10px 0; color: #2ecc71; font-family: monospace;">CANDIDATE REVIEW</h4>`;
             candData.pending_candidates.forEach(cand => {
+                let actions = "";
+                if (cand.status === "PENDING") {
+                    actions = `<button onclick="approveSingleCandidate(${cand.candidate_id})" style="background-color: #2ecc71; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Approve</button>
+                        <button onclick="setReviewedCandidateStatus(${cand.candidate_id}, 'REJECTED')" style="background-color: #c0392b; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Reject</button>`;
+                } else if (cand.status === "ACTIVE") {
+                    actions = `<button onclick="setReviewedCandidateStatus(${cand.candidate_id}, 'WITHDRAWN')" style="background-color: #7f8c8d; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Withdraw</button>`;
+                }
                 html += `<div style="padding: 10px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center;">
-                    <div><strong>${escapeHtml(cand.name)}</strong> (Ticket ID: ${cand.candidate_id})<br><small>Nominated for: <strong>${escapeHtml(cand.position)}</strong></small><br><small>Manifesto: <i>${escapeHtml(cand.manifesto)}</i></small></div>
-                    <button onclick="approveSingleCandidate(${cand.candidate_id})" style="background-color: #2ecc71; padding: 5px 15px; color: white; border: none; border-radius: 4px; cursor: pointer;">Validate Ticket</button>
+                    <div><strong>${escapeHtml(cand.name)}</strong> (Ticket ID: ${cand.candidate_id}) · ${escapeHtml(cand.status)}<br><small>Nominated for: <strong>${escapeHtml(cand.position)}</strong></small><br><small>Manifesto: <i>${escapeHtml(cand.manifesto || "No manifesto provided.")}</i></small></div>
+                    <div class="button-row">${actions}</div>
                 </div>`;
             });
         }
@@ -1109,6 +1339,21 @@ async function approveElectionParty(partyId) {
     } catch (e) { alert("Connection error."); }
 }
 
+async function rejectElectionParty(partyId) {
+    if (!confirm("Reject this party registration and its pending candidate nominations?")) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/parties/${partyId}/reject`, {
+            method: "POST",
+            credentials: "include"
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        fetchPendingCandidates();
+    } catch (error) {
+        alert("Connection error.");
+    }
+}
+
 async function approveSingleCandidate(candidateId) {
     if (!confirm(`Approve ticket ${candidateId} for the official ballot?`)) return;
     try {
@@ -1117,6 +1362,24 @@ async function approveSingleCandidate(candidateId) {
         alert(response.ok ? data.message : data.error);
         fetchPendingCandidates(); 
     } catch (e) { alert("Connection error."); }
+}
+
+async function setReviewedCandidateStatus(candidateId, status) {
+    const action = status === "REJECTED" ? "reject this candidate" : "withdraw this candidate from the ballot";
+    if (!confirm(`Are you sure you want to ${action}? This is available only during the nomination phase.`)) return;
+    try {
+        const response = await fetch(`${API_URL}/api/admin/candidates/${candidateId}/status`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: status })
+        });
+        const data = await response.json();
+        alert(response.ok ? data.message : `Error: ${data.error}`);
+        fetchPendingCandidates();
+    } catch (error) {
+        alert("Connection error.");
+    }
 }
 
 async function loadAuditLogs(containerId) {

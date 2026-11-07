@@ -1122,6 +1122,31 @@ body.auth-page {
 .candidate-card button { margin-top: auto; }
 .candidate-card .vote-button { width: 100%; background: var(--ink-950); border: 1px solid var(--gold-foil); }
 
+.turnout-panel,
+.vote-receipts,
+.independent-nomination-panel {
+    margin: 0 0 var(--space-5);
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border: 1px solid #d6d9f4;
+    border-radius: 1rem;
+    background: linear-gradient(145deg, #ffffff, #f3f7ff);
+}
+.turnout-row + .turnout-row { margin-top: 1rem; }
+.turnout-label { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.4rem; color: #172941; }
+.turnout-label span { color: #5B6478; font-size: 0.85rem; }
+.turnout-track { height: 0.7rem; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+.turnout-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8b5cf6, #2cbfae); transition: width 0.35s ease; }
+.independent-nomination-panel h3,
+.vote-receipts h3 { margin: 0 0 0.45rem; color: #172941; }
+.independent-nomination-panel > p,
+.vote-receipts > p { color: #5B6478; }
+.independent-nomination-panel label { display: block; margin: 0.8rem 0 0.35rem; color: #172941; font-weight: 600; }
+.independent-nomination-panel :is(select, textarea) { width: 100%; margin-bottom: 0.8rem; }
+.vote-receipt { margin-top: 0.8rem; padding: 0.9rem; border: 1px solid #cdd8f0; border-radius: 0.75rem; background: #fff; }
+.vote-receipt code { display: block; margin-bottom: 0.75rem; overflow-wrap: anywhere; color: #172941; }
+.vote-receipt .button-row { margin-bottom: 0.5rem; }
+.receipt-verification { margin: 0; color: #0B7A5F; font-size: 0.9rem; }
+
 .page-actions {
     display: flex;
     justify-content: flex-end;
@@ -2061,6 +2086,7 @@ body.results-page {
     padding: 0.78rem 0.9rem !important;
     white-space: nowrap;
 }
+.hosting-request-actions { display: grid; gap: 0.6rem; }
 .hosting-request-action span { margin-left: 0.35rem; }
 .hosting-request-empty,
 .hosting-request-loading {

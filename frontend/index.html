@@ -34,10 +34,10 @@
             <button class="text-action" type="button" onclick="showForgotPassword()">Forgot your password? Reset it <span>→</span></button>
         </section>
         <section id="otpForm" class="card auth-card otp-card" style="display: none;">
-            <div class="card-kicker">Two-factor verification</div><h2>Confirm it’s you</h2>
-            <p class="card-intro">We sent a six-digit security code to your email.</p>
+            <div class="card-kicker">Email verification</div><h2>Verify your registration</h2>
+            <p class="card-intro">We sent a six-digit verification code to your email.</p>
             <label for="otpCode">One-time passcode</label><input type="text" id="otpCode" placeholder="000000" maxlength="6" inputmode="numeric" autocomplete="one-time-code">
-            <button class="btn btn-success btn-full" onclick="verifyOTP()">Verify & enter <span>→</span></button>
+            <button class="btn btn-success btn-full" onclick="verifyOTP()">Verify registration <span>→</span></button>
             <p id="otpMessage" class="message" style="display: none;"></p>
             <button class="text-action text-action-danger" type="button" onclick="window.location.reload()">Cancel and return</button>
         </section>
