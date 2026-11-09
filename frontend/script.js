@@ -219,6 +219,31 @@ function saveVoteReceipt(electionId, receipt) {
     }
 }
 
+function showBallotCelebration() {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const celebration = document.createElement("div");
+    celebration.className = "ballot-celebration";
+    celebration.setAttribute("aria-hidden", "true");
+
+    for (let index = 0; index < 18; index += 1) {
+        const particle = document.createElement("span");
+        particle.className = "ballot-particle";
+        particle.style.left = `${(index * 37 + 8) % 96}%`;
+        particle.style.animationDelay = `${(index % 6) * 55}ms`;
+        particle.style.animationDuration = `${1550 + (index % 4) * 100}ms`;
+        particle.style.setProperty("--ballot-drift", `${((index * 29) % 121) - 60}px`);
+        particle.style.setProperty("--ballot-rotation", `${index % 2 ? 145 : -145}deg`);
+        for (let line = 0; line < 3; line += 1) {
+            particle.append(document.createElement("i"));
+        }
+        celebration.append(particle);
+    }
+
+    document.body.append(celebration);
+    window.setTimeout(() => celebration.remove(), 2200);
+}
+
 function renderVoteReceipts(electionId) {
     const receipts = getStoredVoteReceipts(electionId);
     if (receipts.length === 0) return "";
@@ -940,6 +965,7 @@ async function castVote(electionId, candidateId) {
         if (response.ok) {
             saveVoteReceipt(electionId, data.receipt);
             alert(`${data.message || "Ballot cryptographically sealed and cast!"}\n\n${data.receipt_notice || ""}\nReceipt: ${data.receipt}`);
+            showBallotCelebration();
             loadElection(); 
             return;
         }

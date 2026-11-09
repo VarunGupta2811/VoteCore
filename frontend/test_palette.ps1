@@ -9,11 +9,11 @@ function Assert-Contains([string] $pattern, [string] $message) {
 }
 
 # Every page, including register.html which has no body class, must inherit the
-# result-page indigo foundation and the shared lilac/teal accents.
-Assert-Contains '(?s)body\s*\{[^}]*background-color:\s*#0f172a' 'The global body selector does not establish the indigo page background.'
-Assert-Contains '(?s)body\s*\{[^}]*rgba\(139,\s*92,\s*246' 'The global body selector does not include the lilac aurora accent.'
-Assert-Contains '(?s)body\s*\{[^}]*rgba\(45,\s*212,\s*191' 'The global body selector does not include the teal aurora accent.'
-Assert-Contains '(?s)\.btn-primary\s*\{[^}]*#6d5bd0' 'Primary actions do not retain the indigo palette role.'
+# midnight foundation and the shared coral/aqua accents.
+Assert-Contains '(?s)body\s*\{[^}]*background-color:\s*#111827' 'The global body selector does not establish the midnight page background.'
+Assert-Contains '(?s)body\s*\{[^}]*rgba\(240,\s*126,\s*101' 'The global body selector does not include the coral aurora accent.'
+Assert-Contains '(?s)body\s*\{[^}]*rgba\(77,\s*207,\s*183' 'The global body selector does not include the aqua aurora accent.'
+Assert-Contains '(?s)\.btn-primary\s*\{[^}]*#b9473f' 'Primary actions do not retain the coral palette role.'
 Assert-Contains '(?s)\.status-pill\s*\{[^}]*#168f85' 'Status surfaces do not retain the teal palette role.'
 
 if ($style -match '(?s)h1::before\s*\{[^}]*rgba\(199,\s*154,\s*61') {

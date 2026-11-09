@@ -70,8 +70,8 @@ Integrity rules are enforced both in the Flask API and in Oracle itself (foreign
 - **PDF reports** — the Super Admin can export the fraud/security ledger; completed elections also publish an official results PDF with aggregate tallies and turnout.
 
 ### 🎨 Interface
-- **React + Vite experience** — animated React routes, election cards and dialogs with Framer Motion, responsive layouts, and reduced-motion support.
-- **Legacy static interface** — the existing HTML, CSS and JavaScript pages remain available during the migration.
+- **React + Vite experience** — a shared midnight, coral, and aqua palette; cinematic ambient motion; animated routes, election cards, and dialogs with Framer Motion; a one-shot, ballot-paper celebration after a successful vote; responsive layouts; and reduced-motion support.
+- **Legacy static interface** — the HTML, CSS, and JavaScript pages share the refreshed palette and animated landing/election surfaces, including the vote celebration, while the React migration is validated.
 
 ---
 

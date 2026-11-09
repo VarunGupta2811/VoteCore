@@ -17,7 +17,7 @@ import {
 import { api, clearUser, downloadFile, saveUser } from "./api.js";
 
 const SessionContext = createContext(null);
-const transition = { duration: 0.38, ease: [0.22, 1, 0.36, 1] };
+const transition = { duration: 0.5, ease: [0.22, 1, 0.36, 1] };
 
 function useSession() {
   return useContext(SessionContext);
@@ -200,6 +200,7 @@ function MotionCard({ children, className = "", delay = 0, ...props }) {
     className={`surface-card ${className}`}
     initial={{ opacity: 0, y: 16 }}
     whileInView={{ opacity: 1, y: 0 }}
+    whileHover={{ y: -3 }}
     viewport={{ once: true, amount: 0.08 }}
     transition={{ ...transition, delay }}
     {...props}
@@ -209,6 +210,41 @@ function MotionCard({ children, className = "", delay = 0, ...props }) {
 function Notice({ tone = "info", children }) {
   if (!children) return null;
   return <div className={`notice notice-${tone}`} role="status">{children}</div>;
+}
+
+function BallotCelebration() {
+  const shouldReduceMotion = useReducedMotion();
+  if (shouldReduceMotion) return null;
+
+  const particles = Array.from({ length: 18 }, (_, index) => ({
+    id: index,
+    left: `${(index * 37 + 8) % 96}%`,
+    delay: `${(index % 6) * 55}ms`,
+    duration: `${1550 + (index % 4) * 100}ms`,
+    drift: `${((index * 29) % 121) - 60}px`,
+    rotation: `${index % 2 ? 145 : -145}deg`
+  }));
+
+  return <motion.div
+    className="ballot-celebration"
+    aria-hidden="true"
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.2 }}
+  >
+    {particles.map((particle) => <span
+      className="ballot-particle"
+      key={particle.id}
+      style={{
+        left: particle.left,
+        animationDelay: particle.delay,
+        animationDuration: particle.duration,
+        "--ballot-drift": particle.drift,
+        "--ballot-rotation": particle.rotation
+      }}
+    ><i /><i /><i /></span>)}
+  </motion.div>;
 }
 
 function Field({ label, name, className = "", as: Element = "input", children, ...props }) {
@@ -553,6 +589,7 @@ function ElectionPage() {
   const [params] = useSearchParams();
   const electionId = params.get("id");
   const [notice, setNotice] = useState(null);
+  const [celebrationKey, setCelebrationKey] = useState(0);
   const [receipts, setReceipts] = useState(() => readReceipts(electionId));
   const loadElection = useCallback(async () => {
     if (!electionId) throw new Error("Election ID is missing.");
@@ -578,6 +615,13 @@ function ElectionPage() {
   const isLeader = data?.parties.some((party) => party.leader_pid === user?.pid);
   const [members, setMembers] = useState([]);
   const [verifyMessages, setVerifyMessages] = useState({});
+  const shouldReduceMotion = useReducedMotion();
+
+  useEffect(() => {
+    if (!celebrationKey) return undefined;
+    const timer = window.setTimeout(() => setCelebrationKey(0), 2200);
+    return () => window.clearTimeout(timer);
+  }, [celebrationKey]);
 
   useEffect(() => {
     setReceipts(readReceipts(electionId));
@@ -614,6 +658,7 @@ function ElectionPage() {
     const next = [{ receipt: result.receipt, received_at: new Date().toISOString() }, ...receipts].slice(0, 20);
     localStorage.setItem(`voteReceipts:${electionId}`, JSON.stringify(next));
     setReceipts(next);
+    if (!shouldReduceMotion) setCelebrationKey((key) => key + 1);
     setNotice({ tone: "success", text: `${result.message} Save this receipt: ${result.receipt}` });
   }
 
@@ -632,6 +677,7 @@ function ElectionPage() {
   const groupedCandidates = groupBy(data.candidates, (candidate) => candidate.position);
 
   return <PageLayout eyebrow={`Official ballot · ${election.status}`} title={election.title}>
+    <AnimatePresence>{celebrationKey > 0 && <BallotCelebration key={celebrationKey} />}</AnimatePresence>
     <div className="election-hero">
       <div>
         <p className="eyebrow">A verified VoteCore election</p><h1>{election.title}</h1>

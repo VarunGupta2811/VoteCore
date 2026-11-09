@@ -980,7 +980,7 @@ def export_official_results(election_id):
 
         cursor.execute("""
             SELECT C.CANDIDATE_ID, U.FIRST_NAME || ' ' || U.LAST_NAME, POS.TITLE,
-                   (SELECT COUNT(*) FROM VOTE V WHERE V.CANDIDATE_ID = C.CANDIDATE_ID),
+                   (SELECT COUNT(*) FROM VOTE V WHERE V.CANDIDATE_ID = C.CANDIDATE_ID) AS VOTE_COUNT,
                    NVL(PP.NAME, 'Independent'), POS.POSITION_ID, POS.DISPLAY_ORDER
             FROM CANDIDATE C
             JOIN UACCOUNT U ON U.PID = C.PID
